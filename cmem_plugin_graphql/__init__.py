@@ -7,31 +7,35 @@ from cmem_plugin_base.dataintegration.entity import (
     Entities, Entity, EntitySchema, EntityPath,
 )
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
+from cmem_plugin_base.dataintegration.types import StringParameterType
+import validators
+
+from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 
 
 @Plugin(
-    label="Random Values (graphql)",
-    description="Generates random values of X rows a Y values.",
+    label="GraphQL (awesome)",
+    description="Retrieves the data from GraphQL APIs",
     documentation="""
-This example workflow operator generates random values.
-
-The values are generated in X rows a Y values. Both parameter can be specified:
-
-- 'number_of_entities': How many rows do you need.
-- 'number_of_values': How many values per row do you need.
+Executes a GraphQL APIs based on fixed configuration and/or input parameters and returns the result as entity.
 """,
     parameters=[
         PluginParameter(
-            name="number_of_entities",
-            label="Entities (Rows)",
-            description="How many rows will be created per run.",
-            default_value="10",
+            name="graphql_url",
+            label="URL",
+            description="The URL to execute this request against. This can be overwritten at execution time via input."
         ),
         PluginParameter(
-            name="number_of_values",
-            label="Values (Columns)",
-            description="How many values are created per entity / row.",
-            default_value="5"
+            name="graphql_query",
+            label="Query",
+            description="GraphQL Query",
+
+        ),
+        PluginParameter(
+            name="graphql_dataset",
+            label="Dataset",
+            description="To which Dataset to write the response",
+            param_type=DatasetParameterType(dataset_type="json")
         )
     ]
 )
@@ -40,48 +44,18 @@ class DollyPlugin(WorkflowPlugin):
 
     def __init__(
             self,
-            number_of_entities: int = 10,
-            number_of_values: int = 5
+            graphql_url: str = None,
+            graphql_query: str = None,
+            graphql_dataset: str = None
     ) -> None:
-        if number_of_entities < 1:
+        self.graphql_url = graphql_url
+        if not validators.url(graphql_url):
             raise ValueError(
-                "Entities (Rows) needs to be a positive integer."
+                "Provide a valid GraphQL URL."
             )
-        if number_of_values < 1:
-            raise ValueError(
-                "Values (Columns) needs to be a positive integer."
-            )
-        self.number_of_entities = number_of_entities
-        self.number_of_values = number_of_values
+        self.graphql_query = graphql_query
+        self.graphql_dataset = graphql_dataset
 
-    def execute(self, inputs=()) -> Entities:
-        self.log.info("Start creating random values.")
-        self.log.info(f"Config length: {len(self.config.get())}")
-        value_counter = 0
-        entities = []
-        for _ in range(self.number_of_entities):
-            entity_uri = f"urn:uuid:{str(uuid.uuid4())}"
-            values = []
-            for _ in range(self.number_of_values):
-                values.append([token_urlsafe(16)])
-                value_counter += 1
-            entities.append(
-                Entity(
-                    uri=entity_uri,
-                    values=values
-                )
-            )
-        paths = []
-        for path_no in range(self.number_of_values):
-            path_uri = f"https://example.org/vocab/RandomValuePath/{path_no}"
-            paths.append(
-                EntityPath(
-                    path=path_uri
-                )
-            )
-        schema = EntitySchema(
-            type_uri="https://example.org/vocab/RandomValueRow",
-            paths=paths,
-        )
-        self.log.info(f"Happy to serve {value_counter} random values.")
-        return Entities(entities=entities, schema=schema)
+    def execute(self, inputs=()) -> None:
+        self.log.info("Start querying APIs")
+

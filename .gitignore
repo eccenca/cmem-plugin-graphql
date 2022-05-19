@@ -147,3 +147,6 @@ co
 artifacts
 .DS_Store
 .task
+
+#PyCharm project setting
+.idea

@@ -61,6 +61,10 @@ class GraphQLPlugin(WorkflowPlugin):
         self.graphql_query = graphql_query
         self.graphql_dataset = graphql_dataset
 
+        dataset = self.graphql_dataset.split(":")
+        self.project_name = dataset[0]
+        self.task_name = dataset[1]
+
     def execute(self, inputs=()):
         self.log.info("Start GraphQL query.")
         # self.log.info(f"Config length: {len(self.config.get())}")
@@ -76,17 +80,28 @@ class GraphQLPlugin(WorkflowPlugin):
 
         self._write_response_to_resource(result)
 
+    def _get_resource_name(self) -> str:
+        """Get resource name for selected dataset"""
+        task_meta_data = get_task(
+            project=self.project_name,
+            task=self.task_name
+        )
+        resource_name = task_meta_data['data']["parameters"]["file"]["value"]
+
+        return resource_name
+
     def _write_response_to_resource(self, response) -> None:
+        """Write the GraphQL response dict to resource file"""
         setup_cmempy_super_user_access()
-        project_resource = self.graphql_dataset.split(":")
-        file_path = f'dummy.txt'
-        file = open(file_path, "w+")
-        file.write(json.dumps(response))
-        file.close()
-        with open(file_path, 'rb') as response_file:
-            create_resource(
-                project_name=project_resource[0],
-                resource_name=project_resource[1],
-                file_resource=response_file,
-                replace=True,
-            )
+
+        create_resource(
+            project_name=self.project_name,
+            resource_name=self._get_resource_name(),
+            file_resource=io.StringIO(
+                json.dumps(
+                    response,
+                    indent=2
+                )
+            ),
+            replace=True,
+        )

@@ -1,19 +1,17 @@
 """GraphQL workflow plugin module"""
-import uuid
-from typing import List
+
+import io
+import json
 
 import validators
 from cmem.cmempy.workspace.projects.resources.resource import create_resource
+from cmem.cmempy.workspace.tasks import get_task
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
-from cmem_plugin_base.dataintegration.entity import Entity, Entities, EntityPath, EntitySchema
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.utils import setup_cmempy_super_user_access
-import io
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
-import json
-from cmem.cmempy.workspace.tasks import get_task
 
 
 @Plugin(
@@ -51,8 +49,15 @@ class GraphQLPlugin(WorkflowPlugin):
             self,
             graphql_url: str = None,
             graphql_query: str = None,
-            graphql_dataset: str = None
+            graphql_dataset: str = ""
+            # Instead of None we are using SPACE to make mypy happy with line 68
     ) -> None:
+        """
+
+        Parameters
+        ----------
+        graphql_dataset : object
+        """
         self.graphql_url = graphql_url
         if not validators.url(graphql_url):
             raise ValueError(
@@ -86,7 +91,7 @@ class GraphQLPlugin(WorkflowPlugin):
             project=self.project_name,
             task=self.task_name
         )
-        resource_name = task_meta_data['data']["parameters"]["file"]["value"]
+        resource_name = str(task_meta_data['data']["parameters"]["file"]["value"])
 
         return resource_name
 

@@ -1,0 +1,7 @@
+# Changes here will be overwritten by Copier
+_commit: v1.0.2
+_src_path: gh:eccenca/cmem-plugin-template
+author_mail: saipraneeth@aarth.io
+author_name: Sai Praneeth M
+project_description: CMEM Plugin to query GraphQL APIs
+project_slug: graphql

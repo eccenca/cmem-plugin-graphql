@@ -17,7 +17,8 @@ include = ["CHANGELOG.md"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-cmem-plugin-base = "^1"
+cmem-cmempy = "^21.11.5"
+cmem-plugin-base = "^1.1.1"
 validators = "^0.19.0"
 gql = {extras = ["all"], version ="^3.2.0" }
 

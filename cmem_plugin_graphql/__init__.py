@@ -9,7 +9,7 @@ from cmem.cmempy.workspace.tasks import get_task
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
-from cmem_plugin_base.dataintegration.utils import setup_cmempy_super_user_access
+from cmem_plugin_base.dataintegration.utils import setup_cmempy_super_user_access, split_task_id
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
 from graphql import GraphQLSyntaxError
@@ -67,9 +67,9 @@ class GraphQLPlugin(WorkflowPlugin):
         self.graphql_query = graphql_query
         self.graphql_dataset = graphql_dataset
 
-        dataset = self.graphql_dataset.split(":")
-        self.project_name = dataset[0]
-        self.task_name = dataset[1]
+        project_name, task_name = split_task_id(self.graphql_dataset)
+        self.project_name = project_name
+        self.task_name = task_name
 
     def execute(self, inputs=()):
         self.log.info("Start GraphQL query.")

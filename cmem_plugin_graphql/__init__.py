@@ -86,7 +86,6 @@ class GraphQLPlugin(WorkflowPlugin):
 
         self._write_response_to_resource(result)
 
-    # pylint: disable=no-self-use
     def _is_query_valid(self, query) -> bool:
         try:
             gql(query)

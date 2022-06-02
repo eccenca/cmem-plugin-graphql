@@ -9,7 +9,8 @@ from cmem.cmempy.workspace.tasks import get_task
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
-from cmem_plugin_base.dataintegration.utils import setup_cmempy_super_user_access, split_task_id
+from cmem_plugin_base.dataintegration.utils import (
+    setup_cmempy_super_user_access, split_task_id)
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
 from graphql import GraphQLSyntaxError

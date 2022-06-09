@@ -8,5 +8,5 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
-- initial version
+- initial version to query GraphQL API's
 

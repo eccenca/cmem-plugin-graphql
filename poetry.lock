@@ -161,7 +161,7 @@ colorama = {version = "*", markers = "platform_system == \"Windows\""}
 
 [[package]]
 name = "cmem-cmempy"
-version = "21.11.5"
+version = "22.1.1"
 description = "API wrapper for eccenca Corporate Memory"
 category = "main"
 optional = false
@@ -172,6 +172,7 @@ certifi = "*"
 pyparsing = "*"
 rdflib = "*"
 requests = "*"
+requests-toolbelt = "*"
 six = "*"
 
 [[package]]
@@ -853,7 +854,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "ad1b506e66d340138eedcdc8c9f335209defe88bbcc417e3e45a6df586b88e94"
+content-hash = "7bec2741a8a30d7f4f1fa155316f0f3b7ab65e467a2bbf700084e3bf31d26b82"
 
 [metadata.files]
 aiohttp = [
@@ -996,8 +997,8 @@ click = [
     {file = "click-8.1.3.tar.gz", hash = "sha256:7682dc8afb30297001674575ea00d1814d808d6a36af415a82bd481d37ba7b8e"},
 ]
 cmem-cmempy = [
-    {file = "cmem_cmempy-21.11.5-py3-none-any.whl", hash = "sha256:f027ac03350b39e7a2c204f1cf879a2dc4ba144cb56cc3218ea9f1f7107c9828"},
-    {file = "cmem_cmempy-21.11.5.tar.gz", hash = "sha256:50e6d103523f04c7138f9581c52f11e7e4c351f4689ee23db550c2a687ff6667"},
+    {file = "cmem_cmempy-22.1.1-py3-none-any.whl", hash = "sha256:fc19a7ae3c75c50acd402058aff1262f73dafd66f293a0563e8c1a8db9f0398d"},
+    {file = "cmem_cmempy-22.1.1.tar.gz", hash = "sha256:c8aa17a84034f1ef58b01763faa5f3e49ef0c2c09c913fd0ee9c80e736671f75"},
 ]
 cmem-plugin-base = [
     {file = "cmem-plugin-base-1.2.0a1.tar.gz", hash = "sha256:cb9600d66f0e2359e187df625690cc7f17974fea691eaae5043aa991fa28c4f9"},

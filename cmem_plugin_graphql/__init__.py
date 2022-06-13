@@ -48,7 +48,18 @@ Example Endpoint: `https://fruits-api.netlify.app/graphql`
 GraphQL is a query language for APIs and a runtime for fulfilling those queries with
 your existing data. Learn more on GraphQL [here](https://graphql.org/).
 
-Example Query: `query{fruit(id:1){id,fruit_name}}`
+Example Query: query allFruits {
+fruits {
+    id
+    scientific_name
+    tree_name
+    fruit_name
+    family
+    origin
+    description
+    climatic_zone
+    }
+}
 """,
             param_type=MultilineStringParameterType(),
         ),

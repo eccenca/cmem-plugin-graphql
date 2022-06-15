@@ -28,10 +28,10 @@ def setup(request):
         autoconfigure=False,
     )
 
-    def teardown():
-        delete_project(PROJECT_NAME)
-
-    request.addfinalizer(teardown)
+    # def teardown():
+    #     delete_project(PROJECT_NAME)
+    #
+    # request.addfinalizer(teardown)
 
 
 @needs_cmem
@@ -74,4 +74,4 @@ def test_validate_invalid_inputs():
     with pytest.raises(ValueError, match="None is not a valid task ID."):
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None"
-        )
+        ).execute()

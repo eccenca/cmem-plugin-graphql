@@ -4,8 +4,6 @@ import io
 import json
 
 import validators
-from cmem.cmempy.workspace.projects.resources.resource import create_resource
-from cmem.cmempy.workspace.tasks import get_task
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.parameter.multiline import (
@@ -13,8 +11,7 @@ from cmem_plugin_base.dataintegration.parameter.multiline import (
 )
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.utils import (
-    setup_cmempy_super_user_access,
-    split_task_id,
+    write_to_dataset
 )
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -91,10 +88,6 @@ class GraphQLPlugin(WorkflowPlugin):
         self.graphql_query = graphql_query
         self.graphql_dataset = graphql_dataset
 
-        project_name, task_name = split_task_id(self.graphql_dataset)
-        self.project_name = project_name
-        self.task_name = task_name
-
     def execute(self, inputs=()):
         self.log.info("Start GraphQL query.")
         # self.log.info(f"Config length: {len(self.config.get())}")
@@ -107,8 +100,8 @@ class GraphQLPlugin(WorkflowPlugin):
 
         # Execute the query on the transport
         result = client.execute(gql(self.graphql_query))
-
-        self._write_response_to_resource(result)
+        write_to_dataset(self.graphql_dataset,
+                         io.StringIO(json.dumps(result, indent=2)))
 
     def _is_query_valid(self, query) -> bool:
         try:
@@ -116,21 +109,3 @@ class GraphQLPlugin(WorkflowPlugin):
             return True
         except GraphQLSyntaxError:
             return False
-
-    def _get_resource_name(self) -> str:
-        """Get resource name for selected dataset"""
-        task_meta_data = get_task(project=self.project_name, task=self.task_name)
-        resource_name = str(task_meta_data["data"]["parameters"]["file"]["value"])
-
-        return resource_name
-
-    def _write_response_to_resource(self, response) -> None:
-        """Write the GraphQL response dict to resource file"""
-        setup_cmempy_super_user_access()
-
-        create_resource(
-            project_name=self.project_name,
-            resource_name=self._get_resource_name(),
-            file_resource=io.StringIO(json.dumps(response, indent=2)),
-            replace=True,
-        )

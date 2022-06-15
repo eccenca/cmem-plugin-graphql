@@ -177,14 +177,14 @@ six = "*"
 
 [[package]]
 name = "cmem-plugin-base"
-version = "1.2.0a2"
+version = "1.2.0"
 description = "Base classes for developing eccenca Coporate Memory plugins."
 category = "main"
 optional = false
 python-versions = ">=3.9,<4.0"
 
 [package.dependencies]
-cmem-cmempy = ">=21.11.5"
+cmem-cmempy = ">=22.1"
 
 [[package]]
 name = "colorama"
@@ -854,7 +854,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "5d32d05fd3d8f8849236139a9b9aa93693c644eb0694a7b21bea3dbed7a44e0c"
+content-hash = "8b54b033fe41ac41679f7db6e135906d7166bfbea4297b053b2eb5a6cd47e1fd"
 
 [metadata.files]
 aiohttp = [
@@ -1001,8 +1001,8 @@ cmem-cmempy = [
     {file = "cmem_cmempy-22.1.1.tar.gz", hash = "sha256:c8aa17a84034f1ef58b01763faa5f3e49ef0c2c09c913fd0ee9c80e736671f75"},
 ]
 cmem-plugin-base = [
-    {file = "cmem-plugin-base-1.2.0a2.tar.gz", hash = "sha256:0f5c1f09efe4707fc3988f7011a84ccf9fbd26854bffa4b84f9731efc16fde17"},
-    {file = "cmem_plugin_base-1.2.0a2-py3-none-any.whl", hash = "sha256:05ea74b78325deb1e799ce7834946d024c1ceee5d37732ace23de5ef2e7ea1f6"},
+    {file = "cmem-plugin-base-1.2.0.tar.gz", hash = "sha256:211d011f4601d2b131275aa5b306ddd4defb8b4d5af960143ea6d1bde4c6c9b6"},
+    {file = "cmem_plugin_base-1.2.0-py3-none-any.whl", hash = "sha256:2beedf7e3ffc96bdeb52fef7321ccfa9ccb62784a6f89b5615f839ce7e9ec35f"},
 ]
 colorama = [
     {file = "colorama-0.4.4-py2.py3-none-any.whl", hash = "sha256:9f47eda37229f68eee03b24b9748937c7dc3868f906e8ba69fbcbdd3bc5dc3e2"},

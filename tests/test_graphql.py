@@ -18,7 +18,8 @@ DATESET_ID = f"{PROJECT_NAME}:{DATASET_NAME}"
 
 
 @pytest.fixture(scope="module")
-def setup(request):
+def project(request):
+    """Provides the DI build project incl. assets."""
     make_new_project(PROJECT_NAME)
     make_new_dataset(
         project_name=PROJECT_NAME,
@@ -28,14 +29,11 @@ def setup(request):
         autoconfigure=False,
     )
 
-    # def teardown():
-    #     delete_project(PROJECT_NAME)
-    #
-    # request.addfinalizer(teardown)
+    request.addfinalizer(lambda: delete_project(PROJECT_NAME))
 
 
 @needs_cmem
-def test_execution(setup):
+def test_execution(project):
     """Test plugin execution"""
     query = "query{fruit(id:1){id,fruit_name}}"
     graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"

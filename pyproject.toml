@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "cmem-plugin-graphql"
-version = "0.0.1"
+version = "1.0.0a1"
 license = "Apache-2.0"
-description = "CMEM Plugin to query GraphQL APIs"
-authors = ["Sai Praneeth M <saipraneeth@aarth.io>"]
+description = "eccenca Corporate Memory workflow plugin that executes a custom GraphQL query to a GraphQL endpoint and saves the result to a JSON dataset."
+authors = ["Sai Praneeth M <saipraneeth@aarth.io>", "Sebastian Tramp <mail@sebastian.tramp.name>"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Programming Language :: GraphQL",
     "Environment :: Plugins",
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]
@@ -17,9 +17,8 @@ include = ["CHANGELOG.md"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-cmem-cmempy = "^21.11.5"
-cmem-plugin-base = "^1.1.1"
-validators = "^0.19.0"
+cmem-plugin-base = ">=1.2.0"
+validators = "^0.20.0"
 gql = {extras = ["all"], version ="^3.2.0" }
 
 [tool.poetry.dev-dependencies]
@@ -32,9 +31,10 @@ safety = "^1.10.3"
 genbadge = "^1.0.6"
 flake8-formatter-junit-xml = "^0.0.6"
 typed-ast = "^1.5.2"
-mypy = "^0.931"
+mypy = "^0.961"
 coverage = "^6.3.2"
 defusedxml = "^0.7.1"
+pylint = "^2.14.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

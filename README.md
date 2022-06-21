@@ -1,6 +1,6 @@
 # cmem-plugin-graphql
 
-CMEM Plugin to query GraphQL APIs
+eccenca Corporate Memory workflow plugin that executes a custom GraphQL query to a GraphQL endpoint and saves the result to a JSON dataset.
 
 ## Development
 

@@ -36,3 +36,4 @@ build:
     paths:
       - ./dist/*.tar.gz
       - ./dist/*.whl
+

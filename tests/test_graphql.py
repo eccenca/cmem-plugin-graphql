@@ -47,6 +47,7 @@ def test_execution(project):
         assert graphql_response == str(response.json())
 
 
+@needs_cmem
 def test_validate_invalid_inputs():
     query = "query{fruit(id:1){id,fruit_name}}"
 
@@ -73,3 +74,7 @@ def test_validate_invalid_inputs():
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None"
         ).execute()
+
+def test_dummy():
+    """Dummy test to avoid pytest to run amok in case no cmem is available."""
+    assert 1 == 1

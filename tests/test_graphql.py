@@ -1,6 +1,4 @@
 """Plugin tests."""
-import json
-
 import pytest
 from cmem.cmempy.workspace.projects.datasets.dataset import make_new_dataset
 from cmem.cmempy.workspace.projects.project import make_new_project, delete_project
@@ -49,6 +47,7 @@ def test_execution(project):
 
 @needs_cmem
 def test_validate_invalid_inputs():
+    """Test for invalid parameter inputs."""
     query = "query{fruit(id:1){id,fruit_name}}"
 
     # Invalid Query
@@ -75,6 +74,7 @@ def test_validate_invalid_inputs():
             graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None"
         ).execute()
 
+
 def test_dummy():
     """Dummy test to avoid pytest to run amok in case no cmem is available."""
-    assert 1 == 1
+

@@ -2,9 +2,12 @@
 
 import io
 import json
+from typing import Sequence
 
 import validators
+from cmem_plugin_base.dataintegration.context import ExecutionContext
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
+from cmem_plugin_base.dataintegration.entity import Entities
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
@@ -73,8 +76,8 @@ class GraphQLPlugin(WorkflowPlugin):
 
     def __init__(
         self,
-        graphql_url: str = None,
-        graphql_query: str = None,
+        graphql_url: str,
+        graphql_query: str,
         graphql_dataset: str = None,
     ) -> None:
 
@@ -88,9 +91,10 @@ class GraphQLPlugin(WorkflowPlugin):
         self.graphql_query = graphql_query
         self.graphql_dataset = graphql_dataset
 
-    def execute(self, inputs=()):
+    def execute(self, inputs: Sequence[Entities],
+                context: ExecutionContext) -> None:
         self.log.info("Start GraphQL query.")
-        # self.log.info(f"Config length: {len(self.config.get())}")
+        dataset_id = f'{context.task.project_id()}:{self.graphql_dataset}'
 
         # Select your transport with a defined url endpoint
         transport = AIOHTTPTransport(url=self.graphql_url)
@@ -100,8 +104,11 @@ class GraphQLPlugin(WorkflowPlugin):
 
         # Execute the query on the transport
         result = client.execute(gql(self.graphql_query))
-        write_to_dataset(self.graphql_dataset,
-                         io.StringIO(json.dumps(result, indent=2)))
+        write_to_dataset(
+            dataset_id,
+            io.StringIO(json.dumps(result, indent=2)),
+            context=context.user
+        )
 
     def _is_query_valid(self, query) -> bool:
         try:

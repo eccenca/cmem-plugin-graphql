@@ -5,7 +5,7 @@ from cmem.cmempy.workspace.projects.project import make_new_project, delete_proj
 from cmem.cmempy.workspace.projects.resources.resource import get_resource_response
 from requests import HTTPError
 
-from cmem_plugin_graphql import GraphQLPlugin
+from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
 from .utils import needs_cmem, TestExecutionContext
 
 GRAPHQL_URL = "https://fruits-api.netlify.app/graphql"

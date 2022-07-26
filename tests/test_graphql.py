@@ -3,16 +3,16 @@ import pytest
 from cmem.cmempy.workspace.projects.datasets.dataset import make_new_dataset
 from cmem.cmempy.workspace.projects.project import make_new_project, delete_project
 from cmem.cmempy.workspace.projects.resources.resource import get_resource_response
+from requests import HTTPError
 
-from cmem_plugin_graphql import GraphQLPlugin
-from .utils import needs_cmem
+from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
+from .utils import needs_cmem, TestExecutionContext
 
 GRAPHQL_URL = "https://fruits-api.netlify.app/graphql"
 
 PROJECT_NAME = "graphql_test_project"
 DATASET_NAME = "sample_fruit"
 RESOURCE_NAME = "sample_fruit.json"
-DATESET_ID = f"{PROJECT_NAME}:{DATASET_NAME}"
 
 
 @pytest.fixture(scope="module")
@@ -37,9 +37,9 @@ def test_execution(project):
     graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
 
     plugin: GraphQLPlugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATESET_ID
+        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
-    plugin.execute()
+    plugin.execute(None, TestExecutionContext(project_id=PROJECT_NAME))
     with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
         print(response.json())
         assert graphql_response == str(response.json())
@@ -57,7 +57,7 @@ def test_validate_invalid_inputs():
     # Invalid URL
     with pytest.raises(ValueError, match="Provide a valid GraphQL URL."):
         GraphQLPlugin(
-            graphql_url=invalid_url, graphql_query=query, graphql_dataset=DATESET_ID
+            graphql_url=invalid_url, graphql_query=query, graphql_dataset=DATASET_NAME
         )
 
     # Invalid query
@@ -65,14 +65,14 @@ def test_validate_invalid_inputs():
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL,
             graphql_query=invalid_query,
-            graphql_dataset=DATESET_ID,
+            graphql_dataset=DATASET_NAME,
         )
 
     # Invalid Dateset
-    with pytest.raises(ValueError, match="None is not a valid task ID."):
+    with pytest.raises(HTTPError):
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None"
-        ).execute()
+        ).execute(None, TestExecutionContext(project_id=PROJECT_NAME))
 
 
 def test_dummy():

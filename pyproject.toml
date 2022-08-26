@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "cmem-plugin-graphql"
-version = "2.0.0"
+version = "2.0.1"
 license = "Apache-2.0"
 homepage = "https://github.com/eccenca/cmem-plugin-graphql"
-description = "eccenca Corporate Memory workflow plugin that executes a custom GraphQL query to a GraphQL endpoint and saves the result to a JSON dataset."
+description = "Send a query to GraphQL endpoint and save the results in a JSON dataset."
 authors = ["Sai Praneeth M <saipraneeth@aarth.io>", "Sebastian Tramp <mail@sebastian.tramp.name>"]
 classifiers = [
     "Environment :: Plugins",

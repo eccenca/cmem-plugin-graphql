@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cmem-plugin-graphql"
-version = "2.0.1"
+version = "0.0.0"
 license = "Apache-2.0"
 homepage = "https://github.com/eccenca/cmem-plugin-graphql"
 description = "Send a query to GraphQL endpoint and save the results in a JSON dataset."
@@ -13,7 +13,6 @@ readme = "README-public.md"
 keywords = [
     "eccenca Corporate Memory", "plugin", "GraphQL"
 ]
-include = ["CHANGELOG.md"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -37,8 +36,13 @@ defusedxml = "^0.7.1"
 pylint = "^2.14.2"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+dirty = true
 
 [tool.pylint.MASTER]
 load-plugins="pylint_junit"

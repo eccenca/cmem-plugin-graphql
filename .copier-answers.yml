@@ -1,9 +1,9 @@
 # Changes here will be overwritten by Copier
-_commit: v2.1.2
+_commit: v3.3.2
 _src_path: gh:eccenca/cmem-plugin-template
 author_mail: saipraneeth@aarth.io
 author_name: Sai Praneeth M
-project_description: eccenca Corporate Memory workflow plugin that executes a custom
-    GraphQL query to a GraphQL endpoint and saves the result to a JSON dataset.
+project_description: Send a query to GraphQL endpoint and save the results in a JSON
+    dataset.
 project_slug: graphql
 

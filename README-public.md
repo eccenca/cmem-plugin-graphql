@@ -1,4 +1,13 @@
 # cmem-plugin-graphql
 
-a CMEM Plugin to query GraphQL APIs and write the response to dataset of type JSON.
-In the current release we are supporting only endpoints without authentication.
+Send a query to GraphQL endpoint and save the results in a JSON dataset.
+
+This is a plugin for [eccenca](https://eccenca.com) [Corporate Memory](https://documentation.eccenca.com).
+
+You can install it with the [cmemc](https://eccenca.com/go/cmemc) command line
+clients like this:
+
+```
+cmemc admin workspace python install cmem-plugin-graphql
+```
+

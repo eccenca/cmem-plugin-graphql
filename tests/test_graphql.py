@@ -77,4 +77,3 @@ def test_validate_invalid_inputs():
 
 def test_dummy():
     """Dummy test to avoid pytest to run amok in case no cmem is available."""
-

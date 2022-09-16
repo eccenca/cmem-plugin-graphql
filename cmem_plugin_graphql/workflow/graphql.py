@@ -2,7 +2,7 @@
 
 import io
 import json
-from typing import Sequence
+from typing import Sequence, Dict, Any
 
 import validators
 from cmem_plugin_base.dataintegration.context import ExecutionContext
@@ -13,12 +13,10 @@ from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
 )
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
-from cmem_plugin_base.dataintegration.utils import (
-    write_to_dataset
-)
+from cmem_plugin_base.dataintegration.utils import write_to_dataset
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import GraphQLSyntaxError
+from graphql import GraphQLSyntaxError, DocumentNode
 
 
 @Plugin(
@@ -64,37 +62,64 @@ fruits {
             param_type=MultilineStringParameterType(),
         ),
         PluginParameter(
+            name="graphql_variable_values",
+            label="Query variables",
+            description="""GraphQL variables""",
+            default_value="",
+            param_type=MultilineStringParameterType(),
+        ),
+        PluginParameter(
             name="graphql_dataset",
             label="Target JSON Dataset",
             description="The Dataset where this task will save the JSON results.",
             param_type=DatasetParameterType(dataset_type="json"),
+            advanced=True,
         ),
     ],
 )
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
+    graphql_variable_values: Dict[str, Any]
+    graphql_url: str
+    graphql_query: DocumentNode
+
     def __init__(
         self,
         graphql_url: str,
         graphql_query: str,
+        graphql_variable_values: str = None,
         graphql_dataset: str = None,
     ) -> None:
 
-        self.graphql_url = graphql_url
         if not validators.url(graphql_url):
             raise ValueError("Provide a valid GraphQL URL.")
+        self.graphql_url = graphql_url
 
-        if not self._is_query_valid(graphql_query):
-            raise ValueError("Query string is not Valid")
+        self.set_graphql_query(graphql_query)
+        self.set_graphql_variable_values(graphql_variable_values)
 
-        self.graphql_query = graphql_query
         self.graphql_dataset = graphql_dataset
 
-    def execute(self, inputs: Sequence[Entities],
-                context: ExecutionContext) -> None:
+    def set_graphql_variable_values(self, variable_values):
+        """Validate and set graphql_variable_values"""
+        try:
+            self.graphql_variable_values = (
+                json.loads(variable_values) if variable_values is not None else {}
+            )
+        except json.decoder.JSONDecodeError as ex:
+            raise ValueError("Variables String are not a valid json.") from ex
+
+    def set_graphql_query(self, query):
+        """Validate and set graphql_query"""
+        try:
+            self.graphql_query = gql(query)
+        except GraphQLSyntaxError as ex:
+            raise ValueError("Query string is not Valid.") from ex
+
+    def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> None:
         self.log.info("Start GraphQL query.")
-        dataset_id = f'{context.task.project_id()}:{self.graphql_dataset}'
+        dataset_id = f"{context.task.project_id()}:{self.graphql_dataset}"
 
         # Select your transport with a defined url endpoint
         transport = AIOHTTPTransport(url=self.graphql_url)
@@ -103,16 +128,10 @@ class GraphQLPlugin(WorkflowPlugin):
         client = Client(transport=transport, fetch_schema_from_transport=True)
 
         # Execute the query on the transport
-        result = client.execute(gql(self.graphql_query))
-        write_to_dataset(
-            dataset_id,
-            io.StringIO(json.dumps(result, indent=2)),
-            context=context.user
+        result = client.execute(
+            document=self.graphql_query,
+            variable_values=self.graphql_variable_values,
         )
-
-    def _is_query_valid(self, query) -> bool:
-        try:
-            gql(query)
-            return True
-        except GraphQLSyntaxError:
-            return False
+        write_to_dataset(
+            dataset_id, io.StringIO(json.dumps(result, indent=2)), context=context.user
+        )

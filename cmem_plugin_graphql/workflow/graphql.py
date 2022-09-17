@@ -2,8 +2,9 @@
 
 import io
 import json
-from typing import Sequence, Dict, Any
+from typing import Sequence
 
+import jinja2
 import validators
 from cmem_plugin_base.dataintegration.context import ExecutionContext
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
@@ -16,7 +17,12 @@ from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.utils import write_to_dataset
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import GraphQLSyntaxError, DocumentNode
+from graphql import GraphQLSyntaxError
+
+from cmem_plugin_graphql.workflow.utils import (
+    entities_to_dict,
+    is_string_jinja_template,
+)
 
 
 @Plugin(
@@ -80,9 +86,11 @@ fruits {
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
-    graphql_variable_values: Dict[str, Any]
+    graphql_variable_values: str
     graphql_url: str
-    graphql_query: DocumentNode
+    graphql_query: str
+    jinja_query: bool = False
+    jinja_variable_values: bool = False
 
     def __init__(
         self,
@@ -91,6 +99,8 @@ class GraphQLPlugin(WorkflowPlugin):
         graphql_variable_values: str = None,
         graphql_dataset: str = None,
     ) -> None:
+
+        self.log.info(f"Init Values: {graphql_variable_values} {graphql_query})")
 
         if not validators.url(graphql_url):
             raise ValueError("Provide a valid GraphQL URL.")
@@ -104,21 +114,32 @@ class GraphQLPlugin(WorkflowPlugin):
     def set_graphql_variable_values(self, variable_values):
         """Validate and set graphql_variable_values"""
         try:
-            self.graphql_variable_values = (
-                json.loads(variable_values) if variable_values is not None else {}
-            )
+            if not variable_values:
+                self.graphql_variable_values = '{}'
+            elif is_string_jinja_template(variable_values):
+                self.jinja_variable_values = True
+                self.graphql_variable_values = variable_values
+            else:
+                json.loads(variable_values)
+                self.graphql_variable_values = variable_values
         except json.decoder.JSONDecodeError as ex:
             raise ValueError("Variables String are not a valid json.") from ex
 
     def set_graphql_query(self, query):
         """Validate and set graphql_query"""
         try:
-            self.graphql_query = gql(query)
+            if is_string_jinja_template(query):
+                self.jinja_query = True
+                self.graphql_query = query
+            else:
+                gql(query)
+                self.graphql_query = query
         except GraphQLSyntaxError as ex:
             raise ValueError("Query string is not Valid.") from ex
 
     def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> None:
         self.log.info("Start GraphQL query.")
+
         dataset_id = f"{context.task.project_id()}:{self.graphql_dataset}"
 
         # Select your transport with a defined url endpoint
@@ -126,12 +147,27 @@ class GraphQLPlugin(WorkflowPlugin):
 
         # Create a GraphQL client using the defined transport
         client = Client(transport=transport, fetch_schema_from_transport=True)
+        payload = []
+        if inputs and self.jinja_query or self.jinja_variable_values:
+            for entities in inputs:
+                for jinja_variable_values in entities_to_dict(entities):
+                    environment = jinja2.Environment(autoescape=True)
+                    template = environment.from_string(self.graphql_query)
+                    query = template.render(jinja_variable_values)
+                    template = environment.from_string(self.graphql_variable_values)
+                    variable_values = template.render(jinja_variable_values)
+                    result = client.execute(
+                        document=gql(query),
+                        variable_values=json.loads(variable_values),
+                    )
+                    payload.append(result)
+        else:
+            result = client.execute(
+                document=gql(self.graphql_query),
+                variable_values=json.loads(self.graphql_variable_values),
+            )
+            payload.append(result)
 
-        # Execute the query on the transport
-        result = client.execute(
-            document=self.graphql_query,
-            variable_values=self.graphql_variable_values,
-        )
         write_to_dataset(
-            dataset_id, io.StringIO(json.dumps(result, indent=2)), context=context.user
+            dataset_id, io.StringIO(json.dumps(payload, indent=2)), context=context.user
         )

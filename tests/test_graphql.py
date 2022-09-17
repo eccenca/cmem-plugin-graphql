@@ -3,9 +3,16 @@ import pytest
 from cmem.cmempy.workspace.projects.datasets.dataset import make_new_dataset
 from cmem.cmempy.workspace.projects.project import make_new_project, delete_project
 from cmem.cmempy.workspace.projects.resources.resource import get_resource_response
+from cmem_plugin_base.dataintegration.entity import (
+    Entities,
+    Entity,
+    EntitySchema,
+    EntityPath,
+)
 from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
+from cmem_plugin_graphql.workflow.utils import is_string_jinja_template
 from .utils import needs_cmem, TestExecutionContext
 
 GRAPHQL_URL = "https://fruits-api.netlify.app/graphql"
@@ -18,14 +25,19 @@ RESOURCE_NAME = "sample_fruit.json"
 @pytest.fixture(scope="module")
 def project(request):
     """Provides the DI build project incl. assets."""
-    make_new_project(PROJECT_NAME)
-    make_new_dataset(
-        project_name=PROJECT_NAME,
-        dataset_name=DATASET_NAME,
-        dataset_type="json",
-        parameters={"file": RESOURCE_NAME},
-        autoconfigure=False,
-    )
+    try:
+        delete_project(PROJECT_NAME)
+    except HTTPError:
+        pass
+    finally:
+        make_new_project(PROJECT_NAME)
+        make_new_dataset(
+            project_name=PROJECT_NAME,
+            dataset_name=DATASET_NAME,
+            dataset_type="json",
+            parameters={"file": RESOURCE_NAME},
+            autoconfigure=False,
+        )
 
     request.addfinalizer(lambda: delete_project(PROJECT_NAME))
 
@@ -39,10 +51,42 @@ def test_execution(project):
     plugin: GraphQLPlugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
-    plugin.execute(None, TestExecutionContext(project_id=PROJECT_NAME))
+    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
     with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
         print(response.json())
-        assert graphql_response == str(response.json())
+        assert graphql_response == str(response.json()[0])
+
+
+@needs_cmem
+def test_execution_with_variables(project):
+    """Test plugin execution"""
+    query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
+    graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
+    graphql_variable = '{"id" : 1}'
+    plugin: GraphQLPlugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=query,
+        graphql_variable_values=graphql_variable,
+        graphql_dataset=DATASET_NAME,
+    )
+    plugin.execute(
+        [Entities([Entity("", [[""]])], EntitySchema(",", [EntityPath("")]))],
+        TestExecutionContext(project_id=PROJECT_NAME),
+    )
+    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
+        print(f"Response: {response.json()}")
+        assert graphql_response == str(response.json()[0])
+
+
+def test_is_string_jinja_template():
+    query = "query allFruits($id:ID!) { fruit(id:$id) { id scientific_name } }"
+    assert not is_string_jinja_template(query)
+    query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }"
+    assert not is_string_jinja_template(query)
+    query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }   "
+    assert not is_string_jinja_template(query)
+    query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }\n   "
+    assert not is_string_jinja_template(query)
 
 
 @needs_cmem
@@ -69,10 +113,10 @@ def test_validate_invalid_inputs():
         )
 
     # Invalid Dateset
-    with pytest.raises(HTTPError):
+    with pytest.raises(HTTPError, match="404 Client Error:*"):
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None"
-        ).execute(None, TestExecutionContext(project_id=PROJECT_NAME))
+        ).execute([], TestExecutionContext(project_id=PROJECT_NAME))
 
 
 def test_dummy():

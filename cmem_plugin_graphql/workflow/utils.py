@@ -5,7 +5,7 @@ from cmem_plugin_base.dataintegration.entity import Entities
 import jinja2
 
 
-def entities_to_dict(entities: Entities) -> Iterator[Dict[str, str]]:
+def get_dict(entities: Entities) -> Iterator[Dict[str, str]]:
     """get dict from entities"""
     paths = entities.schema.paths
     for entity in entities.entities:
@@ -15,7 +15,7 @@ def entities_to_dict(entities: Entities) -> Iterator[Dict[str, str]]:
         yield result
 
 
-def is_string_jinja_template(value: str) -> bool:
+def is_jinja_template(value: str) -> bool:
     """Check value contain jinja variables"""
     value = value.strip()
     environment = jinja2.Environment(autoescape=True)

@@ -20,8 +20,8 @@ from gql.transport.aiohttp import AIOHTTPTransport
 from graphql import GraphQLSyntaxError
 
 from cmem_plugin_graphql.workflow.utils import (
-    entities_to_dict,
-    is_string_jinja_template,
+    get_dict,
+    is_jinja_template,
 )
 
 
@@ -71,7 +71,7 @@ fruits {
             name="graphql_variable_values",
             label="Query variables",
             description="""GraphQL variables""",
-            default_value="",
+            default_value="{}",
             param_type=MultilineStringParameterType(),
         ),
         PluginParameter(
@@ -86,12 +86,6 @@ fruits {
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
-    graphql_variable_values: str
-    graphql_url: str
-    graphql_query: str
-    jinja_query: bool = False
-    jinja_variable_values: bool = False
-
     def __init__(
         self,
         graphql_url: str,
@@ -100,40 +94,43 @@ class GraphQLPlugin(WorkflowPlugin):
         graphql_dataset: str = None,
     ) -> None:
 
-        self.log.info(f"Init Values: {graphql_variable_values} {graphql_query})")
+        self.graphql_query: str = ''
+        self.graphql_variable_values: str = ''
+        self.jinja_query: bool = False
+        self.jinja_variable_values: bool = False
 
         if not validators.url(graphql_url):
             raise ValueError("Provide a valid GraphQL URL.")
-        self.graphql_url = graphql_url
 
+        self.graphql_url = graphql_url
         self.set_graphql_query(graphql_query)
         self.set_graphql_variable_values(graphql_variable_values)
-
         self.graphql_dataset = graphql_dataset
 
     def set_graphql_variable_values(self, variable_values):
         """Validate and set graphql_variable_values"""
         try:
             if not variable_values:
-                self.graphql_variable_values = '{}'
-            elif is_string_jinja_template(variable_values):
+                variable_values = "{}"
+
+            if is_jinja_template(variable_values):
                 self.jinja_variable_values = True
-                self.graphql_variable_values = variable_values
             else:
                 json.loads(variable_values)
-                self.graphql_variable_values = variable_values
+
+            self.graphql_variable_values = variable_values
         except json.decoder.JSONDecodeError as ex:
-            raise ValueError("Variables String are not a valid json.") from ex
+            raise ValueError("Variables String is not valid.") from ex
 
     def set_graphql_query(self, query):
         """Validate and set graphql_query"""
         try:
-            if is_string_jinja_template(query):
+            if is_jinja_template(query):
                 self.jinja_query = True
-                self.graphql_query = query
             else:
                 gql(query)
-                self.graphql_query = query
+
+            self.graphql_query = query
         except GraphQLSyntaxError as ex:
             raise ValueError("Query string is not Valid.") from ex
 
@@ -150,12 +147,15 @@ class GraphQLPlugin(WorkflowPlugin):
         payload = []
         if inputs and self.jinja_query or self.jinja_variable_values:
             for entities in inputs:
-                for jinja_variable_values in entities_to_dict(entities):
+                for jinja_variable_values in get_dict(entities):
                     environment = jinja2.Environment(autoescape=True)
+
                     template = environment.from_string(self.graphql_query)
                     query = template.render(jinja_variable_values)
+
                     template = environment.from_string(self.graphql_variable_values)
                     variable_values = template.render(jinja_variable_values)
+
                     result = client.execute(
                         document=gql(query),
                         variable_values=json.loads(variable_values),

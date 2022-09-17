@@ -12,7 +12,7 @@ from cmem_plugin_base.dataintegration.entity import (
 from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
-from cmem_plugin_graphql.workflow.utils import is_string_jinja_template
+from cmem_plugin_graphql.workflow.utils import is_jinja_template
 from .utils import needs_cmem, TestExecutionContext
 
 GRAPHQL_URL = "https://fruits-api.netlify.app/graphql"
@@ -80,13 +80,13 @@ def test_execution_with_variables(project):
 
 def test_is_string_jinja_template():
     query = "query allFruits($id:ID!) { fruit(id:$id) { id scientific_name } }"
-    assert not is_string_jinja_template(query)
+    assert not is_jinja_template(query)
     query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }"
-    assert not is_string_jinja_template(query)
+    assert not is_jinja_template(query)
     query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }   "
-    assert not is_string_jinja_template(query)
+    assert not is_jinja_template(query)
     query = "query allFruits($id:ID!) { fruit(id:$id) { id\n scientific_name } }\n   "
-    assert not is_string_jinja_template(query)
+    assert not is_jinja_template(query)
 
 
 @needs_cmem

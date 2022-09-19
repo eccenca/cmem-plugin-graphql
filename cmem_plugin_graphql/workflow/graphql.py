@@ -2,11 +2,11 @@
 
 import io
 import json
-from typing import Sequence
+from typing import Sequence, Optional, Dict, Any, Tuple, Iterator
 
 import jinja2
 import validators
-from cmem_plugin_base.dataintegration.context import ExecutionContext
+from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.entity import Entities
 from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
@@ -17,7 +17,7 @@ from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.utils import write_to_dataset
 from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import GraphQLSyntaxError
+from graphql import GraphQLSyntaxError, GraphQLError
 
 from cmem_plugin_graphql.workflow.utils import (
     get_dict,
@@ -79,7 +79,6 @@ fruits {
             label="Target JSON Dataset",
             description="The Dataset where this task will save the JSON results.",
             param_type=DatasetParameterType(dataset_type="json"),
-            advanced=True,
         ),
     ],
 )
@@ -94,8 +93,8 @@ class GraphQLPlugin(WorkflowPlugin):
         graphql_dataset: str = None,
     ) -> None:
 
-        self.graphql_query: str = ''
-        self.graphql_variable_values: str = ''
+        self.graphql_query: str = ""
+        self.graphql_variable_values: str = ""
         self.jinja_query: bool = False
         self.jinja_variable_values: bool = False
 
@@ -112,7 +111,7 @@ class GraphQLPlugin(WorkflowPlugin):
         try:
             if not variable_values:
                 variable_values = "{}"
-
+            variable_values = variable_values.strip()
             if is_jinja_template(variable_values):
                 self.jinja_variable_values = True
             else:
@@ -124,6 +123,7 @@ class GraphQLPlugin(WorkflowPlugin):
 
     def set_graphql_query(self, query):
         """Validate and set graphql_query"""
+        query = query.strip()
         try:
             if is_jinja_template(query):
                 self.jinja_query = True
@@ -136,38 +136,82 @@ class GraphQLPlugin(WorkflowPlugin):
 
     def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> None:
         self.log.info("Start GraphQL query.")
-
         dataset_id = f"{context.task.project_id()}:{self.graphql_dataset}"
-
-        # Select your transport with a defined url endpoint
-        transport = AIOHTTPTransport(url=self.graphql_url)
-
-        # Create a GraphQL client using the defined transport
-        client = Client(transport=transport, fetch_schema_from_transport=True)
+        processed_entities: int = 0
+        failed_entities: int = 0
         payload = []
         if inputs and self.jinja_query or self.jinja_variable_values:
             for entities in inputs:
-                for jinja_variable_values in get_dict(entities):
-                    environment = jinja2.Environment(autoescape=True)
+                for result in self.process_entities(entities=entities):
+                    if not result:
+                        failed_entities += 1
+                    else:
+                        payload.append(result)
+                        processed_entities += 1
 
-                    template = environment.from_string(self.graphql_query)
-                    query = template.render(jinja_variable_values)
-
-                    template = environment.from_string(self.graphql_variable_values)
-                    variable_values = template.render(jinja_variable_values)
-
-                    result = client.execute(
-                        document=gql(query),
-                        variable_values=json.loads(variable_values),
+                    context.report.update(
+                        ExecutionReport(
+                            entity_count=processed_entities + failed_entities,
+                            operation="wait",
+                            operation_desc="queries sent",
+                        )
                     )
-                    payload.append(result)
+
         else:
+            # Select your transport with a defined url endpoint
+            transport = AIOHTTPTransport(url=self.graphql_url)
+            # Create a GraphQL client using the defined transport
+            client = Client(transport=transport, fetch_schema_from_transport=True)
             result = client.execute(
                 document=gql(self.graphql_query),
                 variable_values=json.loads(self.graphql_variable_values),
             )
+            processed_entities += 1
             payload.append(result)
+
+        summary: list[Tuple[str, str]] = []
+        warnings: list[str] = []
+        summary.append(("Failed entities", str(failed_entities)))
+        context.report.update(
+            ExecutionReport(
+                entity_count=processed_entities,
+                operation="read" if self.graphql_query.startswith("query") else "write",
+                operation_desc="entities processed",
+                summary=summary,
+                warnings=warnings,
+            )
+        )
 
         write_to_dataset(
             dataset_id, io.StringIO(json.dumps(payload, indent=2)), context=context.user
         )
+
+    def process_entities(
+        self, entities: Entities
+    ) -> Iterator[Optional[Dict[str, Any]]]:
+        """Process entities"""
+        # Select your transport with a defined url endpoint
+        transport = AIOHTTPTransport(url=self.graphql_url)
+        # Create a GraphQL client using the defined transport
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        environment = jinja2.Environment(autoescape=True)
+        for jinja_variable_values in get_dict(entities):
+            result = None
+            template = environment.from_string(self.graphql_query)
+            query = template.render(jinja_variable_values)
+
+            template = environment.from_string(self.graphql_variable_values)
+            variable_values = template.render(jinja_variable_values)
+            try:
+                result = client.execute(
+                    document=gql(query),
+                    variable_values=json.loads(variable_values),
+                )
+            except (
+                GraphQLError,
+                GraphQLSyntaxError,
+                json.decoder.JSONDecodeError,
+            ) as ex:
+                self.log.error(f"Failed entity: {type(ex)}")
+
+            yield result

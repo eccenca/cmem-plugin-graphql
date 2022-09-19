@@ -17,7 +17,6 @@ def get_dict(entities: Entities) -> Iterator[Dict[str, str]]:
 
 def is_jinja_template(value: str) -> bool:
     """Check value contain jinja variables"""
-    value = value.strip()
     environment = jinja2.Environment(autoescape=True)
     template = environment.from_string(value)
     res = template.render()

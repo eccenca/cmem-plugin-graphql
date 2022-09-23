@@ -22,6 +22,7 @@ from graphql import GraphQLSyntaxError, GraphQLError
 from cmem_plugin_graphql.workflow.utils import (
     get_dict,
     is_jinja_template,
+    get_entities_from_list,
 )
 
 
@@ -79,20 +80,30 @@ fruits {
             label="Target JSON Dataset",
             description="The Dataset where this task will save the JSON results.",
             param_type=DatasetParameterType(dataset_type="json"),
+            advanced=True,
+            default_value="",
+        ),
+        PluginParameter(
+            name="oauth_access_token",
+            label="OAuth access token",
+            description="OAuth access token",
+            advanced=True,
+            default_value="",
         ),
     ],
 )
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         graphql_url: str,
         graphql_query: str,
         graphql_variable_values: str = None,
         graphql_dataset: str = None,
+        oauth_access_token: str = None,
     ) -> None:
-
         self.graphql_query: str = ""
         self.graphql_variable_values: str = ""
         self.jinja_query: bool = False
@@ -105,6 +116,9 @@ class GraphQLPlugin(WorkflowPlugin):
         self.set_graphql_query(graphql_query)
         self.set_graphql_variable_values(graphql_variable_values)
         self.graphql_dataset = graphql_dataset
+        self.headers = {}
+        if oauth_access_token:
+            self.headers["Authorization"] = f"Bearer {oauth_access_token}"
 
     def set_graphql_variable_values(self, variable_values):
         """Validate and set graphql_variable_values"""
@@ -134,9 +148,15 @@ class GraphQLPlugin(WorkflowPlugin):
         except GraphQLSyntaxError as ex:
             raise ValueError("Query string is not Valid.") from ex
 
-    def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> None:
+    def execute(
+        self, inputs: Sequence[Entities], context: ExecutionContext
+    ) -> Entities:
         self.log.info("Start GraphQL query.")
-        dataset_id = f"{context.task.project_id()}:{self.graphql_dataset}"
+        dataset_id = (
+            f"{context.task.project_id()}:{self.graphql_dataset}"
+            if self.graphql_dataset
+            else None
+        )
         processed_entities: int = 0
         failed_entities: int = 0
         payload = []
@@ -159,7 +179,7 @@ class GraphQLPlugin(WorkflowPlugin):
 
         else:
             # Select your transport with a defined url endpoint
-            transport = AIOHTTPTransport(url=self.graphql_url)
+            transport = AIOHTTPTransport(url=self.graphql_url, headers=self.headers)
             # Create a GraphQL client using the defined transport
             client = Client(transport=transport, fetch_schema_from_transport=True)
             result = client.execute(
@@ -181,17 +201,21 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
+        if dataset_id:
+            write_to_dataset(
+                dataset_id,
+                io.StringIO(json.dumps(payload, indent=2)),
+                context=context.user,
+            )
 
-        write_to_dataset(
-            dataset_id, io.StringIO(json.dumps(payload, indent=2)), context=context.user
-        )
+        return get_entities_from_list(payload)
 
     def process_entities(
         self, entities: Entities
     ) -> Iterator[Optional[Dict[str, Any]]]:
         """Process entities"""
         # Select your transport with a defined url endpoint
-        transport = AIOHTTPTransport(url=self.graphql_url)
+        transport = AIOHTTPTransport(url=self.graphql_url, headers=self.headers)
         # Create a GraphQL client using the defined transport
         client = Client(transport=transport, fetch_schema_from_transport=True)
         environment = jinja2.Environment(autoescape=True)

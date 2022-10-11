@@ -78,6 +78,30 @@ def test_execution_with_variables(project):
         assert graphql_response == str(response.json()[0])
 
 
+def test_execution_with_jinja_template(project):
+    """Test plugin execution"""
+    query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
+    graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
+    graphql_variable = '{"id" : {{ id }}}'
+    plugin: GraphQLPlugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=query,
+        graphql_variable_values=graphql_variable,
+        graphql_dataset=DATASET_NAME,
+    )
+    # generate entities
+    path = EntityPath(path="id")
+    schema = EntitySchema(type_uri="", paths=[path])
+    entity = Entity(uri="", values=[[1]])
+    plugin.execute(
+        [Entities(entities=[entity], schema=schema)],
+        TestExecutionContext(project_id=PROJECT_NAME),
+    )
+    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
+        print(f"Response: {response.json()}")
+        assert graphql_response == str(response.json()[0])
+
+
 def test_is_string_jinja_template():
     query = "query allFruits($id:ID!) { fruit(id:$id) { id scientific_name } }"
     assert not is_jinja_template(query)

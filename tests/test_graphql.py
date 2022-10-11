@@ -78,6 +78,7 @@ def test_execution_with_variables(project):
         assert graphql_response == str(response.json()[0])
 
 
+@needs_cmem
 def test_execution_with_jinja_template(project):
     """Test plugin execution"""
     query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"

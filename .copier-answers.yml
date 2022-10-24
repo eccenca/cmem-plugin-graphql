@@ -1,9 +1,9 @@
 # Changes here will be overwritten by Copier
-_commit: v3.3.2
+_commit: v3.4.0
 _src_path: gh:eccenca/cmem-plugin-template
-author_mail: saipraneeth@aarth.io
-author_name: Sai Praneeth M
-project_description: Send a query to GraphQL endpoint and save the results in a JSON
-    dataset.
+author_mail: cmempy-developer@eccenca.com
+author_name: eccenca GmbH
+project_description: Send queries to a GraphQL endpoint and save the results in a
+    JSON dataset.
 project_slug: graphql
 

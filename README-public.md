@@ -1,6 +1,6 @@
 # cmem-plugin-graphql
 
-Send a query to GraphQL endpoint and save the results in a JSON dataset.
+Send queries to a GraphQL endpoint and save the results in a JSON dataset.
 
 This is a plugin for [eccenca](https://eccenca.com) [Corporate Memory](https://documentation.eccenca.com).
 

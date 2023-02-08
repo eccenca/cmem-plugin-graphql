@@ -2,6 +2,8 @@
 
 Send queries to a GraphQL endpoint and save the results in a JSON dataset.
 
+[![eccenca Corporate Memory](https://img.shields.io/badge/eccenca-Corporate%20Memory-orange)](https://documentation.eccenca.com)
+
 ## Development
 
 - Run [task](https://taskfile.dev/) to see all major development tasks.

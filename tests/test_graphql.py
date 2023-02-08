@@ -39,7 +39,7 @@ def project(request):
             autoconfigure=False,
         )
 
-    request.addfinalizer(lambda: delete_project(PROJECT_NAME))
+    # request.addfinalizer(lambda: delete_project(PROJECT_NAME))
 
 
 @needs_cmem
@@ -100,6 +100,123 @@ def test_execution_with_jinja_template(project):
     )
     with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
         print(f"Response: {response.json()}")
+        assert graphql_response == str(response.json()[0])
+
+
+@needs_cmem
+def test_mutation(project):
+    """Test plugin execution"""
+    query = """
+    mutation addFruit{
+    addFruit(
+        id: 1
+        scientific_name: "Malus Domestica"
+        tree_name: "Apple"
+        fruit_name: "Apple"
+        family: "Rosaceae"
+        origin: "Asia Central"
+        description: "The Rosaceae apple, It is a pome-shaped fruit"
+        bloom: "Spring"
+        maturation_fruit: "Late summer or fall"
+        life_cycle: "60-80 years"
+        climatic_zone: "cold"
+     ) {
+        id
+        fruit_name
+     }
+    }
+    """
+    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
+
+    plugin: GraphQLPlugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
+    )
+    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
+    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
+        print(response.json())
+        assert graphql_response == str(response.json()[0])
+
+
+@needs_cmem
+def test_mutation_with_variables(project):
+    """Test plugin execution"""
+    query = """
+    mutation addFruit($id: ID!, $fruit_name: String!){
+    addFruit(
+        id: $id
+        scientific_name: "Malus Domestica"
+        tree_name: "Apple"
+        fruit_name: $fruit_name
+        family: "Rosaceae"
+        origin: "Asia Central"
+        description: "The Rosaceae apple, It is a pome-shaped fruit"
+        bloom: "Spring"
+        maturation_fruit: "Late summer or fall"
+        life_cycle: "60-80 years"
+        climatic_zone: "cold"
+     ) {
+        id
+        fruit_name
+     }
+    }
+    """
+    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
+    graphql_variable = '{"id" : 1, "fruit_name": "Apple"}'
+
+    plugin: GraphQLPlugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=query,
+        graphql_variable_values=graphql_variable,
+        graphql_dataset=DATASET_NAME,
+    )
+    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
+    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
+        print(response.json())
+        assert graphql_response == str(response.json()[0])
+
+
+@needs_cmem
+def test_mutation_with_jinja_template(project):
+    """Test plugin execution"""
+    query = """
+    mutation addFruit($id: ID!){
+    addFruit(
+        id: $id
+        scientific_name: "Malus Domestica"
+        tree_name: "Apple"
+        fruit_name: "Apple"
+        family: "Rosaceae"
+        origin: "Asia Central"
+        description: "The Rosaceae apple, It is a pome-shaped fruit"
+        bloom: "Spring"
+        maturation_fruit: "Late summer or fall"
+        life_cycle: "60-80 years"
+        climatic_zone: "cold"
+     ) {
+        id
+        fruit_name
+     }
+    }
+    """
+    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
+    graphql_variable = '{"id" : {{ id }}}'
+
+    plugin: GraphQLPlugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=query,
+        graphql_variable_values=graphql_variable,
+        graphql_dataset=DATASET_NAME,
+    )
+    # generate entities
+    path = EntityPath(path="id")
+    schema = EntitySchema(type_uri="", paths=[path])
+    entity = Entity(uri="", values=[[1]])
+    plugin.execute(
+        [Entities(entities=[entity], schema=schema)],
+        TestExecutionContext(project_id=PROJECT_NAME),
+    )
+    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
+        print(response.json())
         assert graphql_response == str(response.json()[0])
 
 

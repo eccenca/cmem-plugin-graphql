@@ -30,9 +30,12 @@ from cmem_plugin_graphql.workflow.utils import (
     label="GraphQL query",
     description="Executes a custom GraphQL query to a GraphQL endpoint"
     " and saves result to a JSON dataset.",
-    documentation="""This workflow task sends a GraphQL query to a GraphQL endpoint,
-retrieves the results and saves it as a JSON document to a JSON Dataset
-(which you have to create up-front).""",
+    documentation="""This workflow task performs GraphQL operations by sending
+     queries, mutations, and variables over operations. Allows for customization
+     in the GraphQL query using, Jinja queries and Jinja variables, which can be
+     obtained from entities. The result of the query is saved as a JSON document
+     in a pre-created JSON dataset.
+     """,
     parameters=[
         PluginParameter(
             name="graphql_url",
@@ -71,7 +74,8 @@ fruits {
         PluginParameter(
             name="graphql_variable_values",
             label="Query variables",
-            description="""GraphQL variables""",
+            description="""GraphQL variables
+            """,
             default_value="{}",
             param_type=MultilineStringParameterType(),
         ),
@@ -96,13 +100,13 @@ class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
     # pylint: disable=too-many-arguments
-    def __init__(
+    def __init__(  # nosec
         self,
         graphql_url: str,
         graphql_query: str,
-        graphql_variable_values: str = None,
-        graphql_dataset: str = None,
-        oauth_access_token: str = None,
+        graphql_variable_values: str = "",
+        graphql_dataset: str = "",
+        oauth_access_token: str = "",
     ) -> None:
         self.graphql_query: str = ""
         self.graphql_variable_values: str = ""

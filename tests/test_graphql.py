@@ -39,7 +39,7 @@ def project(request):
             autoconfigure=False,
         )
 
-    # request.addfinalizer(lambda: delete_project(PROJECT_NAME))
+    request.addfinalizer(lambda: delete_project(PROJECT_NAME))
 
 
 @needs_cmem
@@ -48,7 +48,7 @@ def test_execution(project):
     query = "query{fruit(id:1){id,fruit_name}}"
     graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
 
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
@@ -63,7 +63,7 @@ def test_execution_with_variables(project):
     query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
     graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
     graphql_variable = '{"id" : 1}'
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL,
         graphql_query=query,
         graphql_variable_values=graphql_variable,
@@ -84,7 +84,7 @@ def test_execution_with_jinja_template(project):
     query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
     graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
     graphql_variable = '{"id" : {{ id }}}'
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL,
         graphql_query=query,
         graphql_variable_values=graphql_variable,
@@ -128,7 +128,7 @@ def test_mutation(project):
     """
     graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
 
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
@@ -163,7 +163,7 @@ def test_mutation_with_variables(project):
     graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
     graphql_variable = '{"id" : 1, "fruit_name": "Apple"}'
 
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL,
         graphql_query=query,
         graphql_variable_values=graphql_variable,
@@ -201,7 +201,7 @@ def test_mutation_with_jinja_template(project):
     graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
     graphql_variable = '{"id" : {{ id }}}'
 
-    plugin: GraphQLPlugin = GraphQLPlugin(
+    plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL,
         graphql_query=query,
         graphql_variable_values=graphql_variable,

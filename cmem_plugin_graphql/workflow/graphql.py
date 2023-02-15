@@ -74,7 +74,9 @@ fruits {
         PluginParameter(
             name="graphql_variable_values",
             label="Query variables",
-            description="""GraphQL variables
+            description="""Pass dynamic variables when making a query or mutation.
+
+            Example Variables: {"id" : 1}
             """,
             default_value="{}",
             param_type=MultilineStringParameterType(),
@@ -90,7 +92,8 @@ fruits {
         PluginParameter(
             name="oauth_access_token",
             label="OAuth access token",
-            description="OAuth access token",
+            description="Access token that connects to a GraphQL endpoint to"
+            " authorize and secure user access to resources and data.",
             advanced=True,
             default_value="",
         ),

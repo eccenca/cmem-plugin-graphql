@@ -6,15 +6,17 @@ description = "Send queries to a GraphQL endpoint and save the results in a JSON
 homepage = "https://github.com/eccenca/cmem-plugin-graphql"
 authors = ["eccenca GmbH <cmempy-developer@eccenca.com>"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Plugins",
-    "Topic :: Software Development :: Libraries :: Python Modules"
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
 ]
 readme = "README-public.md"
 keywords = [
     "eccenca Corporate Memory", "plugin", "GraphQL"
 ]
-
+include = ["CHANGELOG.md"]
 
 [tool.poetry.dependencies]
 python = "^3.9"

@@ -2,7 +2,7 @@
 
 Send queries to a GraphQL endpoint and save the results in a JSON dataset.
 
-[![eccenca Corporate Memory](https://img.shields.io/badge/eccenca-Corporate%20Memory-orange)](https://documentation.eccenca.com) [![workflow](https://github.com/eccenca/cmem-plugin-graphql/actions/workflows/check.yml/badge.svg)](https://github.com/eccenca/cmem-plugin-graphql/actions) [![PyPI](https://img.shields.io/pypi/v/cmem-plugin-graphql)](https://pypi.org/project/cmem-plugin-graphql/)
+[![eccenca Corporate Memory](https://img.shields.io/badge/eccenca-Corporate%20Memory-orange)](https://documentation.eccenca.com) [![workflow](https://github.com/eccenca/cmem-plugin-graphql/actions/workflows/check.yml/badge.svg)](https://github.com/eccenca/cmem-plugin-graphql/actions) [![pypi version](https://img.shields.io/pypi/v/cmem-plugin-graphql)](https://pypi.org/project/graphql) [![license](https://img.shields.io/pypi/l/cmem-plugin-graphql)](https://pypi.org/project/cmem-plugin-graphql)
 
 ## Development
 

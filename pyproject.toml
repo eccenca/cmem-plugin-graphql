@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cmem-plugin-graphql"
-version = "3.1.1.dev1+70b13de.dirty"
+version = "0.0.0"
 license = "Apache-2.0"
 description = "Send queries to a GraphQL endpoint and save the results in a JSON dataset."
 homepage = "https://github.com/eccenca/cmem-plugin-graphql"
@@ -49,7 +49,7 @@ requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
 build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.poetry-dynamic-versioning]
-enable = false
+enable = true
 vcs = "git"
 dirty = true
 bump = true

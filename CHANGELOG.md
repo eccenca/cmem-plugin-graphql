@@ -4,11 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
-## [Unreleased]
+## [4.0.0]
 
 ### Changed
 
 - upgrade template to 7.0.0
+- generate entites from json payload
+- set output port based on Target JSON dataset field value
 
 ## [3.1.0] 2023-10-24
 

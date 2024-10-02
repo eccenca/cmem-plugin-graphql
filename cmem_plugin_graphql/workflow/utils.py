@@ -1,19 +1,21 @@
 """Utils module"""
+
 import json
 import uuid
-from typing import Dict, Iterator, Any, List, Set, Optional
+from collections.abc import Iterator
+from typing import Any
 
+import jinja2
 from cmem_plugin_base.dataintegration.entity import (
     Entities,
     Entity,
     EntityPath,
     EntitySchema,
 )
-import jinja2
 
 
-def get_dict(entities: Entities) -> Iterator[Dict[str, str]]:
-    """get dict from entities"""
+def get_dict(entities: Entities) -> Iterator[dict[str, str]]:
+    """Get dict from entities"""
     paths = entities.schema.paths
     for entity in entities.entities:
         result = {}
@@ -30,10 +32,10 @@ def is_jinja_template(value: str) -> bool:
     return res != value
 
 
-def get_entities_from_list(data: List[Dict[str, Any]]) -> Entities:
-    """generate entities from list"""
-    paths: List[str] = []
-    unique_paths: Set[str] = set()
+def get_entities_from_list(data: list[dict[str, Any]]) -> Entities:
+    """Generate entities from list"""
+    paths: list[str] = []
+    unique_paths: set[str] = set()
     entities = []
     # first pass to extract paths
     for dict_ in data:
@@ -51,9 +53,9 @@ def get_entities_from_list(data: List[Dict[str, Any]]) -> Entities:
     return Entities(entities=entities, schema=schema)
 
 
-def create_entity(paths: List[str], dict_: Dict[str, Any]) -> Entity:
+def create_entity(paths: list[str], dict_: dict[str, Any]) -> Entity:
     """Create entity from dict based on order from paths list"""
-    values: List[List[Optional[str]]] = []
+    values: list[list[str | None]] = []
     for path in paths:
         value = dict_.get(path)
         if value is None:
@@ -62,5 +64,5 @@ def create_entity(paths: List[str], dict_: Dict[str, Any]) -> Entity:
             values.append([value])
         else:
             values.append([json.dumps(value)])
-    entity_uri = f"urn:uuid:{str(uuid.uuid4())}"
+    entity_uri = f"urn:uuid:{uuid.uuid4()!s}"
     return Entity(uri=entity_uri, values=values)

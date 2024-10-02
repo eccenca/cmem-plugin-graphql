@@ -2,7 +2,8 @@
 
 import io
 import json
-from typing import Sequence, Optional, Dict, Any, Tuple, Iterator
+from collections.abc import Iterator, Sequence
+from typing import Any
 
 import jinja2
 import validators
@@ -15,14 +16,14 @@ from cmem_plugin_base.dataintegration.parameter.multiline import (
 )
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.utils import write_to_dataset
-from gql import gql, Client
+from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import GraphQLSyntaxError, GraphQLError
+from graphql import GraphQLError, GraphQLSyntaxError
 
 from cmem_plugin_graphql.workflow.utils import (
     get_dict,
-    is_jinja_template,
     get_entities_from_list,
+    is_jinja_template,
 )
 
 
@@ -127,7 +128,7 @@ class GraphQLPlugin(WorkflowPlugin):
         if oauth_access_token:
             self.headers["Authorization"] = f"Bearer {oauth_access_token}"
 
-    def set_graphql_variable_values(self, variable_values):
+    def set_graphql_variable_values(self, variable_values: str) -> None:
         """Validate and set graphql_variable_values"""
         try:
             if not variable_values:
@@ -142,7 +143,7 @@ class GraphQLPlugin(WorkflowPlugin):
         except json.decoder.JSONDecodeError as ex:
             raise ValueError("Variables String is not valid.") from ex
 
-    def set_graphql_query(self, query):
+    def set_graphql_query(self, query: str) -> None:
         """Validate and set graphql_query"""
         query = query.strip()
         try:
@@ -155,14 +156,11 @@ class GraphQLPlugin(WorkflowPlugin):
         except GraphQLSyntaxError as ex:
             raise ValueError("Query string is not Valid.") from ex
 
-    def execute(
-        self, inputs: Sequence[Entities], context: ExecutionContext
-    ) -> Entities:
+    def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> Entities:
+        """Execute GraphQL query"""
         self.log.info("Start GraphQL query.")
         dataset_id = (
-            f"{context.task.project_id()}:{self.graphql_dataset}"
-            if self.graphql_dataset
-            else None
+            f"{context.task.project_id()}:{self.graphql_dataset}" if self.graphql_dataset else None
         )
         processed_entities: int = 0
         failed_entities: int = 0
@@ -196,7 +194,7 @@ class GraphQLPlugin(WorkflowPlugin):
             processed_entities += 1
             payload.append(result)
 
-        summary: list[Tuple[str, str]] = []
+        summary: list[tuple[str, str]] = []
         warnings: list[str] = []
         summary.append(("Failed entities", str(failed_entities)))
         context.report.update(
@@ -217,9 +215,7 @@ class GraphQLPlugin(WorkflowPlugin):
 
         return get_entities_from_list(payload)
 
-    def process_entities(
-        self, entities: Entities
-    ) -> Iterator[Optional[Dict[str, Any]]]:
+    def process_entities(self, entities: Entities) -> Iterator[dict[str, Any] | None]:
         """Process entities"""
         # Select your transport with a defined url endpoint
         transport = AIOHTTPTransport(url=self.graphql_url, headers=self.headers)
@@ -243,6 +239,6 @@ class GraphQLPlugin(WorkflowPlugin):
                 GraphQLSyntaxError,
                 json.decoder.JSONDecodeError,
             ) as ex:
-                self.log.error(f"Failed entity: {type(ex)}")
+                self.log.error(f"Failed entity: {type(ex)}")  # noqa: TRY400
 
             yield result

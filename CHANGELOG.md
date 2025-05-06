@@ -1,10 +1,18 @@
+<!-- markdownlint-disable MD012 MD013 MD024 MD033 -->
 # Change Log
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
-## [4.0.0]
+## [4.0.1] 2025-05-05
+
+### Changed
+
+- update dependencies to mitigate critical h11 vulnerability CVE-2025-43859
+
+
+## [4.0.0] 2024-10-03
 
 ### Changed
 

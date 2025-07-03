@@ -170,7 +170,7 @@ class GraphQLPlugin(WorkflowPlugin):
         processed_entities: int = 0
         failed_entities: int = 0
         payload = []
-        if inputs and self.jinja_query or self.jinja_variable_values:
+        if (inputs and self.jinja_query) or self.jinja_variable_values:
             for entities in inputs:
                 for result in self.process_entities(entities=entities):
                     if not result:

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [4.0.2] 2025-07-03
+
+### Changed
+
+- upgrade template (cmem-plugin-base 4.12.1)
+- upgrade gql to 3.5.3
+ 
 ## [4.0.1] 2025-05-05
 
 ### Changed

@@ -1,5 +1,6 @@
 """Plugin tests."""
 
+import os
 from collections.abc import Generator
 
 import pytest
@@ -12,18 +13,21 @@ from cmem_plugin_base.dataintegration.entity import (
     EntityPath,
     EntitySchema,
 )
+from cmem_plugin_base.testing import TestExecutionContext
 from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
 from cmem_plugin_graphql.workflow.utils import is_jinja_template
-
-from .utils import TestExecutionContext, needs_cmem
 
 GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
 
 PROJECT_NAME = "graphql_test_project"
 DATASET_NAME = "sample_fruit"
 RESOURCE_NAME = "sample_fruit.json"
+
+needs_cmem = pytest.mark.skipif(
+    os.environ.get("CMEM_BASE_URI", "") == "", reason="Needs CMEM configuration"
+)
 
 
 @pytest.fixture(scope="module")

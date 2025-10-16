@@ -250,11 +250,11 @@ def test_validate_invalid_inputs() -> None:
     invalid_url = "fruits_invalid"
 
     # Invalid URL
-    with pytest.raises(ValueError, match="Provide a valid GraphQL URL."):
+    with pytest.raises(ValueError, match=r"Provide a valid GraphQL URL."):
         GraphQLPlugin(graphql_url=invalid_url, graphql_query=query, graphql_dataset=DATASET_NAME)
 
     # Invalid query
-    with pytest.raises(ValueError, match="Query string is not Valid"):
+    with pytest.raises(ValueError, match=r"Query string is not Valid"):
         GraphQLPlugin(
             graphql_url=GRAPHQL_URL,
             graphql_query=invalid_query,
@@ -262,7 +262,7 @@ def test_validate_invalid_inputs() -> None:
         )
 
     # Invalid Dateset
-    with pytest.raises(HTTPError, match="404 Client Error:*"):
+    with pytest.raises(HTTPError, match=r"404 Client Error:*"):
         GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None").execute(
             [], TestExecutionContext(project_id=PROJECT_NAME)
         )

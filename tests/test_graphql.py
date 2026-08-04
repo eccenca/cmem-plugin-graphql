@@ -31,7 +31,7 @@ needs_cmem = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def project() -> Generator[str, None, None]:
+def project() -> Generator[str]:
     """Provide the DI build project incl. assets."""
     try:
         delete_project(PROJECT_NAME)

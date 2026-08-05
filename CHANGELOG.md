@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [5.1.0] 2026-08-05
+
+### Changed
+
+- Update dependencies and template
+- Replace `cmem-cmempy` with `cmem-client`
+
+
 ## [5.0.0] 2024-10-16
 
 ### Changed

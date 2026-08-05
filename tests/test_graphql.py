@@ -1,12 +1,15 @@
 """Plugin tests."""
 
+import json
 import os
 from collections.abc import Generator
+from contextlib import suppress
+from typing import Any
 
 import pytest
-from cmem.cmempy.workspace.projects.datasets.dataset import make_new_dataset
-from cmem.cmempy.workspace.projects.project import delete_project, make_new_project
-from cmem.cmempy.workspace.projects.resources.resource import get_resource_response
+from cmem_client.client import Client
+from cmem_client.models.dataset import Dataset
+from cmem_client.models.project import Project
 from cmem_plugin_base.dataintegration.entity import (
     Entities,
     Entity,
@@ -30,24 +33,41 @@ needs_cmem = pytest.mark.skipif(
 )
 
 
+def _get_client() -> Client:
+    """Create a fresh cmem-client from environment."""
+    return Client.from_context(context=TestExecutionContext())
+
+
+def _read_resource(project_name: str, filename: str) -> Any:  # noqa: ANN401
+    """Read a JSON resource from a CMEM project."""
+    client = _get_client()
+    content = client.files.read(f"{project_name}:{filename}")
+
+    return json.loads(content)
+
+
 @pytest.fixture(scope="module")
-def project() -> Generator[str, None, None]:
+def project() -> Generator[str]:
     """Provide the DI build project incl. assets."""
-    try:
-        delete_project(PROJECT_NAME)
-    except HTTPError:
-        pass
-    finally:
-        make_new_project(PROJECT_NAME)
-        make_new_dataset(
-            project_name=PROJECT_NAME,
-            dataset_name=DATASET_NAME,
-            dataset_type="json",
-            parameters={"file": RESOURCE_NAME},
-            autoconfigure=False,
+    client = _get_client()
+
+    # Clean up any previous test project
+    with suppress(HTTPError):
+        client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
+
+    # Create fresh project and dataset
+    client.projects.create_item(Project(name=PROJECT_NAME))
+    client.datasets.create_item(
+        Dataset(
+            id=DATASET_NAME,
+            project_id=PROJECT_NAME,
+            data={"type": "json", "parameters": {"file": RESOURCE_NAME}},
         )
+    )
+
     yield PROJECT_NAME
-    delete_project(PROJECT_NAME)
+
+    client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
 
 
 @needs_cmem
@@ -61,8 +81,8 @@ def test_execution(project: str) -> None:
         graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 @needs_cmem
@@ -82,8 +102,8 @@ def test_execution_with_variables(project: str) -> None:
         [Entities([Entity("", [[""]])], EntitySchema(",", [EntityPath("")]))],
         TestExecutionContext(project_id=PROJECT_NAME),
     )
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 @needs_cmem
@@ -107,8 +127,8 @@ def test_execution_with_jinja_template(project: str) -> None:
         [Entities(entities=[entity], schema=schema)],
         TestExecutionContext(project_id=PROJECT_NAME),
     )
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 @needs_cmem
@@ -141,8 +161,8 @@ def test_mutation(project: str) -> None:
         graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
     )
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 @needs_cmem
@@ -179,8 +199,8 @@ def test_mutation_with_variables(project: str) -> None:
         graphql_dataset=DATASET_NAME,
     )
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 @needs_cmem
@@ -224,8 +244,8 @@ def test_mutation_with_jinja_template(project: str) -> None:
         [Entities(entities=[entity], schema=schema)],
         TestExecutionContext(project_id=PROJECT_NAME),
     )
-    with get_resource_response(PROJECT_NAME, RESOURCE_NAME) as response:
-        assert graphql_response == str(response.json()[0])
+    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert graphql_response == str(result[0])
 
 
 def test_is_string_jinja_template() -> None:

@@ -33,32 +33,6 @@ needs_cmem = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def project() -> Generator[str]:
-    """Provide the DI build project incl. assets."""
-    context = TestExecutionContext()
-    client = Client.from_context(context=context)
-
-    # Clean up any previous test project
-    with suppress(HTTPError):
-        client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
-
-    # Create fresh project and dataset
-    client.projects.create_item(Project(name=PROJECT_NAME))
-    project_id = next(k for k, v in client.projects.items() if v.name == PROJECT_NAME)
-    client.datasets.create_item(
-        Dataset(
-            id=DATASET_NAME,
-            project_id=project_id,
-            data={"type": "json", "parameters": {"file": RESOURCE_NAME}},
-        )
-    )
-
-    yield PROJECT_NAME
-
-    client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
-
-
 def _get_client() -> Client:
     """Create a fresh cmem-client from environment."""
     return Client.from_context(context=TestExecutionContext())
@@ -67,14 +41,33 @@ def _get_client() -> Client:
 def _read_resource(project_name: str, filename: str) -> Any:  # noqa: ANN401
     """Read a JSON resource from a CMEM project."""
     client = _get_client()
-    resources = client.files.get_resources(project_name)
-    matching = [r for r in resources if r.name == filename]
-    if not matching:
-        raise HTTPError(f"Resource {filename} not found in project {project_name}")
-    resource = matching[0]
-    content = client.files.read(f"{project_name}:{resource.full_path}")
+    content = client.files.read(f"{project_name}:{filename}")
 
     return json.loads(content)
+
+
+@pytest.fixture(scope="module")
+def project() -> Generator[str]:
+    """Provide the DI build project incl. assets."""
+    client = _get_client()
+
+    # Clean up any previous test project
+    with suppress(HTTPError):
+        client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
+
+    # Create fresh project and dataset
+    client.projects.create_item(Project(name=PROJECT_NAME))
+    client.datasets.create_item(
+        Dataset(
+            id=DATASET_NAME,
+            project_id=PROJECT_NAME,
+            data={"type": "json", "parameters": {"file": RESOURCE_NAME}},
+        )
+    )
+
+    yield PROJECT_NAME
+
+    client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
 
 
 @needs_cmem

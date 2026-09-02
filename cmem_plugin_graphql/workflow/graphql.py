@@ -22,6 +22,7 @@ from cmem_plugin_base.dataintegration.utils import write_to_dataset
 from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportConnectionFailed, TransportQueryError
 from graphql import GraphQLError, GraphQLSyntaxError
 
 from cmem_plugin_graphql.workflow.utils import (
@@ -188,14 +189,10 @@ class GraphQLPlugin(WorkflowPlugin):
                     )
 
         else:
-            # Select your transport with a defined url endpoint
-            transport = AIOHTTPTransport(url=self.graphql_url, headers=self.headers)
-            # Create a GraphQL client using the defined transport
-            client = Client(transport=transport, fetch_schema_from_transport=True)
-            result = client.execute(
-                document=gql(self.graphql_query),
-                variable_values=json.loads(self.graphql_variable_values),
-            )
+            client = self._create_client()
+            request = gql(self.graphql_query)
+            request.variable_values = json.loads(self.graphql_variable_values)
+            result = client.execute(request)
             processed_entities += 1
             payload.append(result)
 
@@ -220,12 +217,25 @@ class GraphQLPlugin(WorkflowPlugin):
 
         return build_entities_from_data(payload)
 
-    def process_entities(self, entities: Entities) -> Iterator[dict[str, Any] | None]:
-        """Process entities"""
+    def _create_client(self) -> Client:
+        """Create a GraphQL client for the configured endpoint
+
+        `input_value_deprecation` is switched off because gql 4 requests deprecated input
+        fields during introspection by default, which servers running an older graphql-js
+        reject with `Unknown argument "includeDeprecated"`.
+        """
         # Select your transport with a defined url endpoint
         transport = AIOHTTPTransport(url=self.graphql_url, headers=self.headers)
         # Create a GraphQL client using the defined transport
-        client = Client(transport=transport, fetch_schema_from_transport=True)
+        return Client(
+            transport=transport,
+            fetch_schema_from_transport=True,
+            introspection_args={"input_value_deprecation": False},
+        )
+
+    def process_entities(self, entities: Entities) -> Iterator[dict[str, Any] | None]:
+        """Process entities"""
+        client = self._create_client()
         environment = jinja2.Environment(autoescape=True)
         for jinja_variable_values in get_dict(entities):
             result = None
@@ -235,13 +245,14 @@ class GraphQLPlugin(WorkflowPlugin):
             template = environment.from_string(self.graphql_variable_values)
             variable_values = template.render(jinja_variable_values)
             try:
-                result = client.execute(
-                    document=gql(query),
-                    variable_values=json.loads(variable_values),
-                )
+                request = gql(query)
+                request.variable_values = json.loads(variable_values)
+                result = client.execute(request)
             except (
                 GraphQLError,
                 GraphQLSyntaxError,
+                TransportQueryError,
+                TransportConnectionFailed,
                 json.decoder.JSONDecodeError,
             ) as ex:
                 self.log.error(f"Failed entity: {type(ex)}")  # noqa: TRY400

@@ -10,6 +10,7 @@ import pytest
 from cmem_client.client import Client
 from cmem_client.models.dataset import Dataset
 from cmem_client.models.project import Project
+from cmem_plugin_base.dataintegration.context import ExecutionContext, ReportContext
 from cmem_plugin_base.dataintegration.entity import (
     Entities,
     Entity,
@@ -31,6 +32,77 @@ RESOURCE_NAME = "sample_fruit.json"
 needs_cmem = pytest.mark.skipif(
     os.environ.get("CMEM_BASE_URI", "") == "", reason="Needs CMEM configuration"
 )
+
+FRUIT_QUERY = "query{fruit(id:1){id,fruit_name}}"
+FRUIT_QUERY_WITH_VARIABLE = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
+MANZANA = [["1"], ["Manzana"]]
+
+
+class StubExecutionContext(ExecutionContext):
+    """An execution context which needs no Corporate Memory deployment.
+
+    Without a target dataset, ``GraphQLPlugin.execute()`` touches nothing but
+    ``context.report``, so the GraphQL code path can be covered without credentials.
+    ``TestExecutionContext`` is unusable here because it builds a ``TestUserContext``,
+    which fetches an OAuth token while it is constructed.
+    """
+
+    def __init__(self) -> None:
+        self.report = ReportContext()
+
+
+def assert_is_manzana(entities: Entities) -> None:
+    """Assert that the entities are the fruit with id 1, nested under a `fruit` path."""
+    assert [path.path for path in entities.schema.paths] == ["fruit"]
+    fruit = entities.sub_entities[0]
+    assert [path.path for path in fruit.schema.paths] == ["id", "fruit_name"]
+    assert [entity.values for entity in fruit.entities] == [MANZANA]
+
+
+def test_execution_without_dataset() -> None:
+    """Test a plain query against the endpoint, without a target dataset"""
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
+    assert_is_manzana(plugin.execute([], StubExecutionContext()))
+
+
+def test_execution_without_dataset_with_variables() -> None:
+    """Test a query with static variables, without a target dataset"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : 1}',
+    )
+    assert_is_manzana(plugin.execute([], StubExecutionContext()))
+
+
+def test_process_entities_renders_jinja_variables() -> None:
+    """Test that Jinja variables are rendered from the input entities"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : {{ id }}}',
+    )
+    entities = Entities(
+        entities=[Entity(uri="", values=[[1]])],
+        schema=EntitySchema(type_uri="", paths=[EntityPath(path="id")]),
+    )
+    assert list(plugin.process_entities(entities)) == [
+        {"fruit": {"id": "1", "fruit_name": "Manzana"}}
+    ]
+
+
+def test_process_entities_yields_none_on_transport_error() -> None:
+    """Test that an unreachable endpoint fails the entity instead of the whole task"""
+    plugin = GraphQLPlugin(
+        graphql_url="https://127.0.0.1:1/graphql",
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : {{ id }}}',
+    )
+    entities = Entities(
+        entities=[Entity(uri="", values=[[1]])],
+        schema=EntitySchema(type_uri="", paths=[EntityPath(path="id")]),
+    )
+    assert list(plugin.process_entities(entities)) == [None]
 
 
 def _get_client() -> Client:

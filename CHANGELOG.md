@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [6.0.0] 2026-09-02
+
+### Changed
+
+- Update dependencies and template
+- Upgrade to `gql` 4, and reduce its extras to `aiohttp`, the only transport this plugin uses
+
+### Fixed
+
+- A GraphQL endpoint which fails or is unreachable now fails the single entity and is
+  counted in the "Failed entities" report, instead of aborting the whole task
+
+### Breaking Change
+
+- The TLS certificate of the queried GraphQL endpoint is now verified. Up to and including
+  5.1.0, certificates were not checked at all, so a task pointing at an endpoint with a
+  self-signed or otherwise untrusted certificate will now fail. Provide the endpoint with a
+  certificate from a trusted authority.
+
+
 ## [5.1.0] 2026-08-05
 
 ### Changed

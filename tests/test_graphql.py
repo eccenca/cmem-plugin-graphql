@@ -21,7 +21,7 @@ from cmem_plugin_base.testing import TestExecutionContext
 from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
-from cmem_plugin_graphql.workflow.utils import is_jinja_template
+from cmem_plugin_graphql.workflow.utils import create_entity, is_jinja_template
 
 GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
 
@@ -318,6 +318,15 @@ def test_mutation_with_jinja_template(project: str) -> None:
     )
     result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
     assert graphql_response == str(result[0])
+
+
+def test_create_entity_keeps_unicode_characters_in_nested_values() -> None:
+    """Test that non-ASCII characters in a nested (dict/list) value are not escaped"""
+    entity = create_entity(["nested"], {"nested": {"city": "Köln", "name": "Müller"}})
+    value = entity.values[0][0]
+    assert "\\u00f6" not in value
+    assert "\\u00fc" not in value
+    assert json.loads(value) == {"city": "Köln", "name": "Müller"}
 
 
 def test_is_string_jinja_template() -> None:

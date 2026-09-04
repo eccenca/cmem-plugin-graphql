@@ -63,6 +63,6 @@ def create_entity(paths: list[str], dict_: dict[str, Any]) -> Entity:
         elif type(value) in (int, float, bool, str):
             values.append([value])
         else:
-            values.append([json.dumps(value)])
+            values.append([json.dumps(value, ensure_ascii=False)])
     entity_uri = f"urn:uuid:{uuid.uuid4()!s}"
     return Entity(uri=entity_uri, values=values)

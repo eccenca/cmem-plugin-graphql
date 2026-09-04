@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [Unreleased]
+
+### Fixed
+
+- GraphQL query plugin no longer converts non-ASCII characters to unicode escape sequences in
+  entity values and in the JSON written to the target dataset
+
 ## [6.0.0] 2026-09-02
 
 ### Changed

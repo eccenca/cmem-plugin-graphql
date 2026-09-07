@@ -7,10 +7,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Changed
+
+- Expanded task and parameter documentation to describe port/value shapes and the Jinja
+  templating edge cases around missing input
+
 ### Fixed
 
 - GraphQL query plugin no longer converts non-ASCII characters to unicode escape sequences in
-  entity values and in the JSON written to the target dataset
+  the JSON written to the target dataset
 
 ## [6.0.0] 2026-09-02
 

@@ -113,7 +113,8 @@ def _get_client() -> Client:
 def _read_raw_resource(project_name: str, filename: str) -> str:
     """Read the raw (undecoded) text content of a resource from a CMEM project."""
     client = _get_client()
-    return client.files.read(f"{project_name}:{filename}").decode("utf-8")
+    content: bytes = client.files.read(f"{project_name}:{filename}")
+    return content.decode("utf-8")
 
 
 def _read_resource(project_name: str, filename: str) -> Any:  # noqa: ANN401

@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - GraphQL query plugin no longer converts non-ASCII characters to unicode escape sequences in
   the JSON written to the target dataset
+- Fixed a related upload bug this uncovered: the target dataset write passed a text stream to
+  an API that expects a byte stream, which silently truncated the uploaded file whenever the
+  JSON contained multi-byte UTF-8 characters (masked previously only because escaped output
+  was always pure ASCII)
 
 ## [6.0.0] 2026-09-02
 

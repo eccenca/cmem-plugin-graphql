@@ -241,7 +241,7 @@ class GraphQLPlugin(WorkflowPlugin):
         if dataset_id:
             write_to_dataset(
                 dataset_id,
-                io.StringIO(json.dumps(payload, indent=2, ensure_ascii=False)),
+                io.BytesIO(json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")),
                 context=context.user,
             )
 

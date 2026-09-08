@@ -33,14 +33,37 @@ from cmem_plugin_graphql.workflow.utils import (
 
 @Plugin(
     label="GraphQL query",
-    description="Executes a custom GraphQL query to a GraphQL endpoint"
-    " and saves result to a JSON dataset.",
-    documentation="""This workflow task performs GraphQL operations by sending
-     queries, mutations, and variables over operations. Allows for customization
-     in the GraphQL query using, Jinja queries and Jinja variables, which can be
-     obtained from entities. The result of the query is saved as a JSON document
-     in a pre-created JSON dataset.
-     """,
+    description="Sends a GraphQL query or mutation to an endpoint and returns the result,"
+    " or writes it to a JSON dataset.",
+    documentation="""This task sends a GraphQL query or mutation to an endpoint and
+captures the response.
+
+An input port accepts entities, but it only changes anything when **Query** or
+**Query variables** actually contains Jinja syntax: the query and variables are
+then rendered once per input entity and the endpoint is called once per entity,
+with a failed entity logged and skipped rather than failing the whole task. A
+purely static query and variables text runs exactly once and ignores any
+connected input entirely.
+
+When **Target JSON Dataset** is left empty, the collected response(s) become
+entities returned on the output port, one per query execution. When it is set,
+the output port disappears instead and the same responses are written there as
+a single JSON array.
+
+The task typically starts a chain that begins at a GraphQL API and lands the
+result either in a downstream transform, via the output port, or in a JSON
+dataset for later use.
+
+A Jinja-templated **Query** or **Query variables** is never checked for GraphQL
+syntax errors until it is actually rendered - a mistake in it only surfaces at
+runtime, as a failed entity, rather than as a configuration error when the task
+is set up. If **Query** contains Jinja syntax and no input is connected at all,
+the unrendered `{{ ... }}` text is sent to the GraphQL library as literal
+syntax and the task fails outright. If only **Query variables** contains Jinja
+syntax while **Query** is static, and no input is connected, the task instead
+sends nothing and completes as if zero entities were processed, without
+warning that the variables were never rendered.
+""",
     parameters=[
         PluginParameter(
             name="graphql_url",
@@ -60,6 +83,9 @@ Example Endpoint: `https://fruits-api.netlify.app/graphql`
 
 GraphQL is a query language for APIs and a runtime for fulfilling those queries with
 your existing data. Learn more on GraphQL [here](https://graphql.org/).
+
+May also contain Jinja syntax (e.g. `{{ id }}`), which is rendered against each
+input entity before the query is sent.
 
 Example Query: query allFruits {
 fruits {
@@ -81,15 +107,19 @@ fruits {
             label="Query variables",
             description="""Pass dynamic variables when making a query or mutation.
 
-            Example Variables: {"id" : 1}
-            """,
+May also contain Jinja syntax (e.g. `{"id": {{ id }}}`), which is rendered
+against each input entity before the query is sent.
+
+Example Variables: `{"id" : 1}`
+""",
             default_value="{}",
             param_type=MultilineStringParameterType(),
         ),
         PluginParameter(
             name="graphql_dataset",
             label="Target JSON Dataset",
-            description="The Dataset where this task will save the JSON results.",
+            description="The JSON dataset the result is written to. When set, the output port"
+            " is removed and the result is only available in the dataset.",
             param_type=DatasetParameterType(dataset_type="json"),
             advanced=True,
             default_value="",
@@ -211,7 +241,7 @@ class GraphQLPlugin(WorkflowPlugin):
         if dataset_id:
             write_to_dataset(
                 dataset_id,
-                io.StringIO(json.dumps(payload, indent=2)),
+                io.BytesIO(json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")),
                 context=context.user,
             )
 

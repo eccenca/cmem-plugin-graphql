@@ -110,12 +110,16 @@ def _get_client() -> Client:
     return Client.from_context(context=TestExecutionContext())
 
 
+def _read_raw_resource(project_name: str, filename: str) -> str:
+    """Read the raw (undecoded) text content of a resource from a CMEM project."""
+    client = _get_client()
+    content: bytes = client.files.read(f"{project_name}:{filename}")
+    return content.decode("utf-8")
+
+
 def _read_resource(project_name: str, filename: str) -> Any:  # noqa: ANN401
     """Read a JSON resource from a CMEM project."""
-    client = _get_client()
-    content = client.files.read(f"{project_name}:{filename}")
-
-    return json.loads(content)
+    return json.loads(_read_raw_resource(project_name, filename))
 
 
 @pytest.fixture(scope="module")
@@ -155,6 +159,24 @@ def test_execution(project: str) -> None:
     plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
     result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
     assert graphql_response == str(result[0])
+
+
+@needs_cmem
+def test_execution_preserves_unicode_characters(project: str) -> None:
+    """Test that non-ASCII characters from the GraphQL response are not escaped in the dataset"""
+    _ = project
+    query = "query{fruit(id:4){id,scientific_name,fruit_name,family}}"
+
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
+    )
+    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
+    raw_content = _read_raw_resource(PROJECT_NAME, RESOURCE_NAME)
+    assert "\\u00f3" not in raw_content
+    assert "\\u00e1" not in raw_content
+    fruit = json.loads(raw_content)[0]["fruit"]
+    assert fruit["fruit_name"] == "Limón"
+    assert fruit["family"] == "Rutáceae"
 
 
 @needs_cmem

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [Unreleased]
+
+### Changed
+
+- Expanded task and parameter documentation to describe port/value shapes and the Jinja
+  templating edge cases around missing input
+
+### Fixed
+
+- GraphQL query plugin no longer converts non-ASCII characters to unicode escape sequences in
+  the JSON written to the target dataset
+- Fixed a related upload bug this uncovered: the target dataset write passed a text stream to
+  an API that expects a byte stream, which silently truncated the uploaded file whenever the
+  JSON contained multi-byte UTF-8 characters (masked previously only because escaped output
+  was always pure ASCII)
+- Query variables parameter description no longer renders its example as an indented code
+  block due to leftover indentation in the source string
+
 ## [6.0.0] 2026-09-02
 
 ### Changed

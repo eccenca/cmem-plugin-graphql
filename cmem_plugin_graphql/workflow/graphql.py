@@ -110,8 +110,8 @@ fruits {
 May also contain Jinja syntax (e.g. `{"id": {{ id }}}`), which is rendered
 against each input entity before the query is sent.
 
-            Example Variables: {"id" : 1}
-            """,
+Example Variables: `{"id" : 1}`
+""",
             default_value="{}",
             param_type=MultilineStringParameterType(),
         ),

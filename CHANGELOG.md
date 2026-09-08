@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   an API that expects a byte stream, which silently truncated the uploaded file whenever the
   JSON contained multi-byte UTF-8 characters (masked previously only because escaped output
   was always pure ASCII)
+- Query variables parameter description no longer renders its example as an indented code
+  block due to leftover indentation in the source string
 
 ## [6.0.0] 2026-09-02
 

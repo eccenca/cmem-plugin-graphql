@@ -1,16 +1,8 @@
 """Plugin tests."""
 
-import json
 import os
-from collections.abc import Generator
-from contextlib import suppress
-from typing import Any
 
-import httpx
 import pytest
-from cmem_client.client import Client
-from cmem_client.models.dataset import Dataset
-from cmem_client.models.project import Project
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ReportContext
 from cmem_plugin_base.dataintegration.entity import (
     Entities,
@@ -19,20 +11,12 @@ from cmem_plugin_base.dataintegration.entity import (
     EntitySchema,
 )
 from cmem_plugin_base.dataintegration.parameter.password import Password
-from cmem_plugin_base.testing import TestExecutionContext, TestSystemContext
+from cmem_plugin_base.testing import TestSystemContext
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
 from cmem_plugin_graphql.workflow.utils import is_jinja_template
 
 GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
-
-PROJECT_NAME = "graphql_test_project"
-DATASET_NAME = "sample_fruit"
-RESOURCE_NAME = "sample_fruit.json"
-
-needs_cmem = pytest.mark.skipif(
-    os.environ.get("CMEM_BASE_URI", "") == "", reason="Needs CMEM configuration"
-)
 
 # ``TESTING_GITLAB_URL`` names a GitLab instance; its GraphQL endpoint is always
 # ``/api/graphql`` on that instance. A configuration that spells the full endpoint out
@@ -50,10 +34,10 @@ needs_gitlab = pytest.mark.skipif(
 )
 
 
-# Passed through variables rather than inline: ruff reads a string literal handed to an
-# argument named like a secret as a hardcoded credential (S106).
-LEGACY_VALUE = "value-from-the-deprecated-parameter"
-CURRENT_VALUE = "value-from-the-access-token-parameter"
+# Passed through a variable rather than inline: ruff reads a string literal handed to an
+# argument named like a secret as a hardcoded credential (S106). The variable itself must
+# not be named like one either, or S105 says the same thing about the assignment.
+CONFIGURED_VALUE = "value-from-the-access-token-parameter"
 
 
 def password(value: str) -> Password:
@@ -69,18 +53,70 @@ FRUIT_QUERY = "query{fruit(id:1){id,fruit_name}}"
 FRUIT_QUERY_WITH_VARIABLE = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
 MANZANA = [["1"], ["Manzana"]]
 
+ADD_FRUIT_MUTATION = """
+mutation addFruit{
+addFruit(
+    id: 1
+    scientific_name: "Malus Domestica"
+    tree_name: "Apple"
+    fruit_name: "Apple"
+    family: "Rosaceae"
+    origin: "Asia Central"
+    description: "The Rosaceae apple, It is a pome-shaped fruit"
+    bloom: "Spring"
+    maturation_fruit: "Late summer or fall"
+    life_cycle: "60-80 years"
+    climatic_zone: "cold"
+ ) {
+    id
+    fruit_name
+ }
+}
+"""
+
+ADD_FRUIT_MUTATION_WITH_VARIABLES = """
+mutation addFruit($id: ID!, $fruit_name: String!){
+addFruit(
+    id: $id
+    scientific_name: "Malus Domestica"
+    tree_name: "Apple"
+    fruit_name: $fruit_name
+    family: "Rosaceae"
+    origin: "Asia Central"
+    description: "The Rosaceae apple, It is a pome-shaped fruit"
+    bloom: "Spring"
+    maturation_fruit: "Late summer or fall"
+    life_cycle: "60-80 years"
+    climatic_zone: "cold"
+ ) {
+    id
+    fruit_name
+ }
+}
+"""
+
+APPLE = [["1"], ["Apple"]]
+
 
 class StubExecutionContext(ExecutionContext):
     """An execution context which needs no Corporate Memory deployment.
 
-    Without a target dataset, ``GraphQLPlugin.execute()`` touches nothing but
-    ``context.report``, so the GraphQL code path can be covered without credentials.
-    ``TestExecutionContext`` is unusable here because it builds a ``TestUserContext``,
-    which fetches an OAuth token while it is constructed.
+    ``GraphQLPlugin.execute()`` touches nothing but ``context.report``, so every code
+    path can be covered without credentials. ``TestExecutionContext`` is unusable here
+    because it builds a ``TestUserContext``, which fetches an OAuth token while it is
+    constructed.
     """
 
     def __init__(self) -> None:
         self.report = ReportContext()
+
+
+def id_entities(value: int) -> Entities:
+    """Build a single input entity carrying `value` under the path `id`."""
+    return Entities(
+        entities=iter([Entity(uri="", values=[[str(value)]])]),
+        schema=EntitySchema(type_uri="", paths=[EntityPath(path="id")]),
+    )
 
 
 def assert_is_manzana(entities: Entities) -> None:
@@ -91,20 +127,83 @@ def assert_is_manzana(entities: Entities) -> None:
     assert [entity.values for entity in fruit.entities] == [MANZANA]
 
 
-def test_execution_without_dataset() -> None:
-    """Test a plain query against the endpoint, without a target dataset"""
+def assert_is_added_apple(entities: Entities) -> None:
+    """Assert that the entities are the apple the mutation added."""
+    assert [path.path for path in entities.schema.paths] == ["addFruit"]
+    fruit = entities.sub_entities[0]
+    assert [path.path for path in fruit.schema.paths] == ["id", "fruit_name"]
+    assert [entity.values for entity in fruit.entities] == [APPLE]
+
+
+def test_execution() -> None:
+    """Test a plain query against the endpoint"""
     plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
     assert_is_manzana(plugin.execute([], StubExecutionContext()))
 
 
-def test_execution_without_dataset_with_variables() -> None:
-    """Test a query with static variables, without a target dataset"""
+def test_execution_with_variables() -> None:
+    """Test a query with static variables"""
     plugin = GraphQLPlugin(
         graphql_url=GRAPHQL_URL,
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : 1}',
     )
     assert_is_manzana(plugin.execute([], StubExecutionContext()))
+
+
+def test_execution_with_jinja_template() -> None:
+    """Test that a Jinja template in the variables queries once per input entity"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : {{ id }}}',
+    )
+    assert_is_manzana(plugin.execute([id_entities(1)], StubExecutionContext()))
+
+
+def test_execution_preserves_unicode_characters() -> None:
+    """Test that non-ASCII characters from the GraphQL response reach the entities intact"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query="query{fruit(id:4){id,scientific_name,fruit_name,family}}",
+    )
+    entities = plugin.execute([], StubExecutionContext())
+    fruit = entities.sub_entities[0]
+    values = dict(
+        zip(
+            [path.path for path in fruit.schema.paths],
+            next(iter(fruit.entities)).values,
+            strict=True,
+        )
+    )
+    assert values["fruit_name"] == ["Limón"]
+    assert values["family"] == ["Rutáceae"]
+
+
+def test_mutation() -> None:
+    """Test a mutation without variables"""
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=ADD_FRUIT_MUTATION)
+    assert_is_added_apple(plugin.execute([], StubExecutionContext()))
+
+
+def test_mutation_with_variables() -> None:
+    """Test a mutation with static variables"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=ADD_FRUIT_MUTATION_WITH_VARIABLES,
+        graphql_variable_values='{"id" : 1, "fruit_name": "Apple"}',
+    )
+    assert_is_added_apple(plugin.execute([], StubExecutionContext()))
+
+
+def test_mutation_with_jinja_template() -> None:
+    """Test a mutation whose variables are rendered from an input entity"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=ADD_FRUIT_MUTATION_WITH_VARIABLES,
+        graphql_variable_values='{"id" : {{ id }}, "fruit_name": "Apple"}',
+    )
+    assert_is_added_apple(plugin.execute([id_entities(1)], StubExecutionContext()))
 
 
 def test_process_entities_renders_jinja_variables() -> None:
@@ -114,11 +213,7 @@ def test_process_entities_renders_jinja_variables() -> None:
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
-    entities = Entities(
-        entities=[Entity(uri="", values=[[1]])],
-        schema=EntitySchema(type_uri="", paths=[EntityPath(path="id")]),
-    )
-    assert list(plugin.process_entities(entities)) == [
+    assert list(plugin.process_entities(id_entities(1))) == [
         {"fruit": {"id": "1", "fruit_name": "Manzana"}}
     ]
 
@@ -130,248 +225,7 @@ def test_process_entities_yields_none_on_transport_error() -> None:
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
-    entities = Entities(
-        entities=[Entity(uri="", values=[[1]])],
-        schema=EntitySchema(type_uri="", paths=[EntityPath(path="id")]),
-    )
-    assert list(plugin.process_entities(entities)) == [None]
-
-
-def _get_client() -> Client:
-    """Create a fresh cmem-client from environment."""
-    return Client.from_context(context=TestExecutionContext())
-
-
-def _read_raw_resource(project_name: str, filename: str) -> str:
-    """Read the raw (undecoded) text content of a resource from a CMEM project."""
-    client = _get_client()
-    content: bytes = client.files.read(f"{project_name}:{filename}")
-    return content.decode("utf-8")
-
-
-def _read_resource(project_name: str, filename: str) -> Any:  # noqa: ANN401
-    """Read a JSON resource from a CMEM project."""
-    return json.loads(_read_raw_resource(project_name, filename))
-
-
-@pytest.fixture(scope="module")
-def project() -> Generator[str]:
-    """Provide the DI build project incl. assets."""
-    client = _get_client()
-
-    # Clean up any previous test project
-    with suppress(httpx.HTTPStatusError):
-        client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
-
-    # Create fresh project and dataset
-    client.projects.create_item(Project(name=PROJECT_NAME))
-    client.datasets.create_item(
-        Dataset(
-            id=DATASET_NAME,
-            project_id=PROJECT_NAME,
-            data={"type": "json", "parameters": {"file": RESOURCE_NAME}},
-        )
-    )
-
-    yield PROJECT_NAME
-
-    client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
-
-
-@needs_cmem
-def test_execution(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = "query{fruit(id:1){id,fruit_name}}"
-    graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
-
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
-    )
-    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
-
-
-@needs_cmem
-def test_execution_preserves_unicode_characters(project: str) -> None:
-    """Test that non-ASCII characters from the GraphQL response are not escaped in the dataset"""
-    _ = project
-    query = "query{fruit(id:4){id,scientific_name,fruit_name,family}}"
-
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
-    )
-    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    raw_content = _read_raw_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert "\\u00f3" not in raw_content
-    assert "\\u00e1" not in raw_content
-    fruit = json.loads(raw_content)[0]["fruit"]
-    assert fruit["fruit_name"] == "Limón"
-    assert fruit["family"] == "Rutáceae"
-
-
-@needs_cmem
-def test_execution_with_variables(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
-    graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
-    graphql_variable = '{"id" : 1}'
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        graphql_query=query,
-        graphql_variable_values=graphql_variable,
-        graphql_dataset=DATASET_NAME,
-    )
-    plugin.execute(
-        [Entities([Entity("", [[""]])], EntitySchema(",", [EntityPath("")]))],
-        TestExecutionContext(project_id=PROJECT_NAME),
-    )
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
-
-
-@needs_cmem
-def test_execution_with_jinja_template(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
-    graphql_response = "{'fruit': {'id': '1', 'fruit_name': 'Manzana'}}"
-    graphql_variable = '{"id" : {{ id }}}'
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        graphql_query=query,
-        graphql_variable_values=graphql_variable,
-        graphql_dataset=DATASET_NAME,
-    )
-    # generate entities
-    path = EntityPath(path="id")
-    schema = EntitySchema(type_uri="", paths=[path])
-    entity = Entity(uri="", values=[[1]])
-    plugin.execute(
-        [Entities(entities=[entity], schema=schema)],
-        TestExecutionContext(project_id=PROJECT_NAME),
-    )
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
-
-
-@needs_cmem
-def test_mutation(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = """
-    mutation addFruit{
-    addFruit(
-        id: 1
-        scientific_name: "Malus Domestica"
-        tree_name: "Apple"
-        fruit_name: "Apple"
-        family: "Rosaceae"
-        origin: "Asia Central"
-        description: "The Rosaceae apple, It is a pome-shaped fruit"
-        bloom: "Spring"
-        maturation_fruit: "Late summer or fall"
-        life_cycle: "60-80 years"
-        climatic_zone: "cold"
-     ) {
-        id
-        fruit_name
-     }
-    }
-    """
-    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
-
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset=DATASET_NAME
-    )
-    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
-
-
-@needs_cmem
-def test_mutation_with_variables(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = """
-    mutation addFruit($id: ID!, $fruit_name: String!){
-    addFruit(
-        id: $id
-        scientific_name: "Malus Domestica"
-        tree_name: "Apple"
-        fruit_name: $fruit_name
-        family: "Rosaceae"
-        origin: "Asia Central"
-        description: "The Rosaceae apple, It is a pome-shaped fruit"
-        bloom: "Spring"
-        maturation_fruit: "Late summer or fall"
-        life_cycle: "60-80 years"
-        climatic_zone: "cold"
-     ) {
-        id
-        fruit_name
-     }
-    }
-    """
-    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
-    graphql_variable = '{"id" : 1, "fruit_name": "Apple"}'
-
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        graphql_query=query,
-        graphql_variable_values=graphql_variable,
-        graphql_dataset=DATASET_NAME,
-    )
-    plugin.execute([], TestExecutionContext(project_id=PROJECT_NAME))
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
-
-
-@needs_cmem
-def test_mutation_with_jinja_template(project: str) -> None:
-    """Test plugin execution"""
-    _ = project
-    query = """
-    mutation addFruit($id: ID!){
-    addFruit(
-        id: $id
-        scientific_name: "Malus Domestica"
-        tree_name: "Apple"
-        fruit_name: "Apple"
-        family: "Rosaceae"
-        origin: "Asia Central"
-        description: "The Rosaceae apple, It is a pome-shaped fruit"
-        bloom: "Spring"
-        maturation_fruit: "Late summer or fall"
-        life_cycle: "60-80 years"
-        climatic_zone: "cold"
-     ) {
-        id
-        fruit_name
-     }
-    }
-    """
-    graphql_response = "{'addFruit': {'id': '1', 'fruit_name': 'Apple'}}"
-    graphql_variable = '{"id" : {{ id }}}'
-
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        graphql_query=query,
-        graphql_variable_values=graphql_variable,
-        graphql_dataset=DATASET_NAME,
-    )
-    # generate entities
-    path = EntityPath(path="id")
-    schema = EntitySchema(type_uri="", paths=[path])
-    entity = Entity(uri="", values=[[1]])
-    plugin.execute(
-        [Entities(entities=[entity], schema=schema)],
-        TestExecutionContext(project_id=PROJECT_NAME),
-    )
-    result = _read_resource(PROJECT_NAME, RESOURCE_NAME)
-    assert graphql_response == str(result[0])
+    assert list(plugin.process_entities(id_entities(1))) == [None]
 
 
 def test_is_string_jinja_template() -> None:
@@ -386,67 +240,33 @@ def test_is_string_jinja_template() -> None:
     assert not is_jinja_template(query)
 
 
-@needs_cmem
 def test_validate_invalid_inputs() -> None:
     """Test for invalid parameter inputs."""
     query = "query{fruit(id:1){id,fruit_name}}"
-
-    # Invalid Query
     invalid_query = "query1{fruit(id:1){id,fruit_name}}"
     invalid_url = "fruits_invalid"
 
     # Invalid URL
     with pytest.raises(ValueError, match=r"Provide a valid GraphQL URL."):
-        GraphQLPlugin(graphql_url=invalid_url, graphql_query=query, graphql_dataset=DATASET_NAME)
+        GraphQLPlugin(graphql_url=invalid_url, graphql_query=query)
 
     # Invalid query
     with pytest.raises(ValueError, match=r"Query string is not Valid"):
-        GraphQLPlugin(
-            graphql_url=GRAPHQL_URL,
-            graphql_query=invalid_query,
-            graphql_dataset=DATASET_NAME,
-        )
-
-    # Invalid Dateset
-    with pytest.raises(httpx.HTTPStatusError, match=r"404 Not Found"):
-        GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None").execute(
-            [], TestExecutionContext(project_id=PROJECT_NAME)
-        )
+        GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=invalid_query)
 
 
 def test_access_token_is_sent_as_bearer_header() -> None:
     """Test that the access token becomes an Authorization header"""
     plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, access_token=password(CURRENT_VALUE)
+        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, access_token=password(CONFIGURED_VALUE)
     )
-    assert plugin.headers == {"Authorization": f"Bearer {CURRENT_VALUE}"}
+    assert plugin.headers == {"Authorization": f"Bearer {CONFIGURED_VALUE}"}
 
 
 def test_no_token_sends_no_authorization_header() -> None:
-    """Test that no header is sent when neither token parameter is configured"""
+    """Test that no header is sent when no token is configured"""
     plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
     assert plugin.headers == {}
-
-
-def test_deprecated_token_is_used_and_warned_about(caplog: pytest.LogCaptureFixture) -> None:
-    """Test that the deprecated parameter still authenticates, and says so"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, oauth_access_token=LEGACY_VALUE
-    )
-    assert plugin.headers == {"Authorization": f"Bearer {LEGACY_VALUE}"}
-    assert "deprecated" in caplog.text
-
-
-def test_access_token_wins_over_deprecated_token(caplog: pytest.LogCaptureFixture) -> None:
-    """Test that the deprecated parameter is ignored, silently, once the new one is set"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        graphql_query=FRUIT_QUERY,
-        access_token=password(CURRENT_VALUE),
-        oauth_access_token=LEGACY_VALUE,
-    )
-    assert plugin.headers == {"Authorization": f"Bearer {CURRENT_VALUE}"}
-    assert "deprecated" not in caplog.text
 
 
 @needs_gitlab
@@ -469,7 +289,3 @@ def test_gitlab_query_with_access_token() -> None:
     usernames = [entity.values[0][0] for entity in current_user.entities]
     assert len(usernames) == 1
     assert usernames[0]
-
-
-def test_dummy() -> None:
-    """Dummy test to avoid pytest to run amok in case no cmem is available."""

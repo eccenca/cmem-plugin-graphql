@@ -1,17 +1,14 @@
 """GraphQL workflow plugin module"""
 
-import io
 import json
 from collections.abc import Iterator, Sequence
 from typing import Any
 
 import jinja2
 import validators
-from cmem_plugin_base.dataintegration.client import get_client
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.entity import Entities
-from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterType
 from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
 )
@@ -34,8 +31,8 @@ from cmem_plugin_graphql.workflow.utils import (
 
 @Plugin(
     label="GraphQL query",
-    description="Sends a GraphQL query or mutation to an endpoint and returns the result,"
-    " or writes it to a JSON dataset.",
+    description="Sends a GraphQL query or mutation to an endpoint and returns the result"
+    " as entities.",
     documentation="""This task sends a GraphQL query or mutation to an endpoint and
 captures the response.
 
@@ -46,14 +43,9 @@ with a failed entity logged and skipped rather than failing the whole task. A
 purely static query and variables text runs exactly once and ignores any
 connected input entirely.
 
-When **Target JSON Dataset** is left empty, the collected response(s) become
-entities returned on the output port, one per query execution. When it is set,
-the output port disappears instead and the same responses are written there as
-a single JSON array.
-
-The task typically starts a chain that begins at a GraphQL API and lands the
-result either in a downstream transform, via the output port, or in a JSON
-dataset for later use.
+The collected responses leave on the output port, one entity per query
+execution. Their paths are the fields the response carries, so a downstream
+task has to accept the schema as it comes.
 
 A Jinja-templated **Query** or **Query variables** is never checked for GraphQL
 syntax errors until it is actually rendered - a mistake in it only surfaces at
@@ -117,15 +109,6 @@ Example Variables: `{"id" : 1}`
             param_type=MultilineStringParameterType(),
         ),
         PluginParameter(
-            name="graphql_dataset",
-            label="Target JSON Dataset",
-            description="The JSON dataset the result is written to. When set, the output port"
-            " is removed and the result is only available in the dataset.",
-            param_type=DatasetParameterType(dataset_type="json"),
-            advanced=True,
-            default_value="",
-        ),
-        PluginParameter(
             name="access_token",
             label="Access token",
             description="""The token the endpoint is authenticated with. It is sent as the
@@ -138,34 +121,17 @@ For GitLab, a personal, project or group access token works, with scope
             advanced=True,
             default_value="",
         ),
-        PluginParameter(
-            name="oauth_access_token",
-            label="OAuth access token (deprecated)",
-            description="""Deprecated in favour of **Access token**, which keeps the value
-encrypted. A token configured here is used only while **Access token** is empty.
-
-Copy it into **Access token** and clear this field, then rotate the token:
-everything configured here is stored in plain text in the task configuration and
-in every project export. This parameter is removed in version 7.0.0.
-""",
-            advanced=True,
-            default_value="",
-        ),
     ],
 )
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
-    # A plugin constructor takes one argument per PluginParameter, so its arity is
-    # fixed by the plugin's configuration surface, not by a style choice here.
-    def __init__(  # noqa: PLR0913, PLR0917
+    def __init__(
         self,
         graphql_url: str,
         graphql_query: str,
         graphql_variable_values: str = "",
-        graphql_dataset: str = "",
         access_token: Password | str = "",
-        oauth_access_token: str = "",
     ) -> None:
         self.graphql_query: str = ""
         self.graphql_variable_values: str = ""
@@ -178,31 +144,12 @@ class GraphQLPlugin(WorkflowPlugin):
         self.graphql_url = graphql_url
         self.set_graphql_query(graphql_query)
         self.set_graphql_variable_values(graphql_variable_values)
-        self.graphql_dataset = graphql_dataset
         self.headers = {}
-        token = self._resolve_access_token(access_token, oauth_access_token)
+        token = access_token.decrypt() if isinstance(access_token, Password) else access_token
         if token:
             self.headers["Authorization"] = f"Bearer {token}"
 
         self._set_ports()
-
-    def _resolve_access_token(self, access_token: Password | str, oauth_access_token: str) -> str:
-        """Return the token to authenticate with, preferring the non-deprecated parameter
-
-        `oauth_access_token` is used only while `access_token` is empty, and using it is
-        logged, since that parameter is removed in version 7.0.0.
-        """
-        token = access_token.decrypt() if isinstance(access_token, Password) else access_token
-        if token:
-            return token
-        if oauth_access_token:
-            self.log.warning(
-                "The deprecated 'OAuth access token' parameter is used. Move the value to the"
-                " 'Access token' parameter, which keeps it encrypted, and clear the deprecated"
-                " one - it is removed in version 7.0.0."
-            )
-            return oauth_access_token
-        return ""
 
     def set_graphql_variable_values(self, variable_values: str) -> None:
         """Validate and set graphql_variable_values"""
@@ -275,15 +222,6 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
-        if self.graphql_dataset:
-            get_client(context).datasets.post_file_resource(
-                project_id=context.task.project_id(),
-                dataset_id=self.graphql_dataset,
-                file_resource=io.BytesIO(
-                    json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
-                ),
-            )
-
         return build_entities_from_data(payload)
 
     def _create_client(self) -> Client:
@@ -330,7 +268,4 @@ class GraphQLPlugin(WorkflowPlugin):
 
     def _set_ports(self) -> None:
         """Define input/output ports based on the configuration"""
-        if self.graphql_dataset:
-            self.output_port = None
-        else:
-            self.output_port = UnknownSchemaPort()
+        self.output_port = UnknownSchemaPort()

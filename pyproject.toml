@@ -2,7 +2,7 @@
 name = "cmem-plugin-graphql"
 version = "0.0.0"
 license = "Apache-2.0"
-description = "Send queries to a GraphQL endpoint and save the results in a JSON dataset."
+description = "Send queries to a GraphQL endpoint and process the results in a workflow."
 homepage = "https://github.com/eccenca/cmem-plugin-graphql"
 authors = ["eccenca GmbH <cmempy-developer@eccenca.com>"]
 classifiers = [

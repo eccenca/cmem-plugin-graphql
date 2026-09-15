@@ -16,16 +16,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Changed
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
-- The result is written to the target dataset with cmem-client instead of the deprecated
-  cmempy, so an error reported when that write fails now names the request that failed
+- The result always leaves on the output port now, one entity per query execution
+- The task no longer talks to Corporate Memory at all
 
-### Deprecated
+### Removed
 
-- The **OAuth access token** parameter, in favour of **Access token**. A token configured
-  there is still used while **Access token** is empty, and now logs a warning when it is.
-  Copy the value over, clear the old field and rotate the token, since everything stored
-  there has been kept in plain text in the task configuration and in project exports. The
-  parameter is removed in version 7.0.0
+- The **Target JSON Dataset** parameter. A task configured with one has to be rebuilt:
+  connect the output port to the task that should receive the result, and write it to
+  a dataset with a dedicated task where that is still wanted
+- The **OAuth access token** parameter, announced for removal in this version. Move the
+  value to **Access token**, which keeps it encrypted, and rotate the token, since
+  everything stored in the old parameter was kept in plain text in the task
+  configuration and in every project export
 
 
 ## [6.0.1] 2026-09-08

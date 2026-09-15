@@ -23,7 +23,17 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   as GraphQL on its own - which a Jinja template usually does not - one holding
   several operations, and one whose top level is a fragment still offer an unknown
   schema. Because a query does not say how many values a field carries, every path
-  is offered as possibly multi valued
+  is offered as possibly multi valued, and the entities are built to match that,
+  so a field answering with a single object arrives as a one element list. A JSON
+  dataset connected to the output port therefore holds an array wherever the
+  endpoint answered with one object
+
+### Fixed
+
+- A field the endpoint answers with null for some items and with an object for others
+  no longer breaks a JSON dataset connected to the output port. Such a field was
+  described as a relation and given an empty string instead of a reference where the
+  answer was null, and the write failed with *Current context not Array but Object*
 - The task no longer talks to Corporate Memory at all
 
 ### Removed

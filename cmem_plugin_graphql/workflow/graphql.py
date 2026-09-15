@@ -25,6 +25,7 @@ from gql.transport.exceptions import TransportConnectionFailed, TransportQueryEr
 from graphql import GraphQLError, GraphQLSyntaxError
 
 from cmem_plugin_graphql.workflow.utils import (
+    entities_from_payload,
     get_dict,
     is_jinja_template,
     output_schema_from_query,
@@ -241,11 +242,15 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
+        if self.output_schema:
+            # The declared schema has to hold for whatever came back, so the entities are
+            # built to match it rather than read off the response.
+            return entities_from_payload(payload, self.output_schema)
         # An empty payload carries no shape to read a schema off, so build_entities_from_data
         # answers None rather than an empty collection.
         entities = build_entities_from_data(payload)
         if entities is None:
-            return Entities(entities=iter([]), schema=self.output_schema or EMPTY_SCHEMA)
+            return Entities(entities=iter([]), schema=EMPTY_SCHEMA)
         return entities
 
     def _create_client(self) -> Client:

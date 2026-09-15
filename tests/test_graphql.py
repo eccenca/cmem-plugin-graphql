@@ -15,7 +15,11 @@ from cmem_plugin_base.dataintegration.ports import FixedSchemaPort, UnknownSchem
 from cmem_plugin_base.testing import TestSystemContext
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
-from cmem_plugin_graphql.workflow.utils import is_jinja_template, output_schema_from_query
+from cmem_plugin_graphql.workflow.utils import (
+    entities_from_payload,
+    is_jinja_template,
+    output_schema_from_query,
+)
 
 GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
 
@@ -300,21 +304,73 @@ def test_output_port_is_unknown_when_the_query_does_not() -> None:
     assert isinstance(plugin.output_port, UnknownSchemaPort)
 
 
-def test_declared_schema_matches_the_response() -> None:
-    """Test that the paths promised before the call are the paths the endpoint answers with.
+def test_declared_schema_is_the_schema_of_the_entities() -> None:
+    """Test that what the port promised is exactly what execute() returns.
 
-    Only the names are compared: ``is_single_value`` is deliberately declared as
-    multi valued, while the entity builder reads the actual cardinality off the
-    response and says ``True`` for a field that happened to answer with one object.
+    A consumer holds the declaration against the entities: a JSON dataset sink
+    configured from a path declared multi valued and then handed a single object
+    fails with *Current context not Array but Object*. ``fruit(id:1)`` answers with
+    one object, which is the case that mismatched while the entities were built from
+    the response rather than from the declaration.
     """
     plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
     entities = plugin.execute([], StubExecutionContext())
-    assert [path.path for path in plugin.output_port.schema.paths] == [
-        path.path for path in entities.schema.paths
-    ]
-    assert [path.is_relation for path in plugin.output_port.schema.paths] == [
-        path.is_relation for path in entities.schema.paths
-    ]
+    assert entities.schema == plugin.output_port.schema
+
+
+def test_a_relation_path_carries_sub_entity_uris() -> None:
+    """Test that a path declared as a relation answers with a list of URIs to resolve"""
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
+    entities = plugin.execute([], StubExecutionContext())
+    uris = [value for entity in entities.entities for value in entity.values]
+    assert uris == [[entity.uri for entity in entities.sub_entities[0].entities]]
+
+
+def test_a_null_object_leaves_no_placeholder_in_a_relation() -> None:
+    """Test that a field null for one item and an object for another stays writable.
+
+    ``build_entities_from_data`` calls such a field a relation, because one item does
+    carry an object, and then writes ``[""]`` for the item where it was null. An empty
+    string is not a sub entity URI: a JSON dataset sink handed one aborts the whole
+    write with *Current context not Array but Object*, which is how a GitLab query
+    asking for a ``createdByUser`` that nobody set took a workflow down.
+    """
+    schema = output_schema_from_query("query { project { states { createdByUser { name } } } }")
+    assert schema is not None
+    entities = entities_from_payload(
+        [{"project": {"states": [{"createdByUser": None}, {"createdByUser": {"name": "a"}}]}}],
+        schema,
+    )
+    for collection in entities.sub_entities or []:
+        relations = [index for index, p in enumerate(collection.schema.paths) if p.is_relation]
+        for entity in collection.entities:
+            for index in relations:
+                assert "" not in entity.values[index]
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        pytest.param([{"fruit": {"id": "1"}}], 1, id="one object"),
+        pytest.param([{"fruit": [{"id": "1"}, {"id": "2"}]}], 2, id="a list"),
+        pytest.param([{"fruit": None}], 0, id="null"),
+        pytest.param([{}], 0, id="field absent from the response"),
+    ],
+)
+def test_entities_conform_to_the_declared_schema(payload: list[dict], expected: int) -> None:
+    """Test that the declaration holds whatever the endpoint answers with.
+
+    The entity builder in cmem-plugin-base reads its schema off the data, so these
+    four responses describe the same query four different ways - single valued for
+    the object, multi valued for the list, and not even a relation for the other two.
+    A declared schema has to survive all of them.
+    """
+    schema = output_schema_from_query(FRUIT_QUERY)
+    assert schema is not None
+    entities = entities_from_payload(payload, schema)
+    assert entities.schema == schema
+    root = next(iter(entities.entities))
+    assert len(root.values[0]) == expected
 
 
 def test_is_string_jinja_template() -> None:

@@ -11,10 +11,11 @@ from cmem_plugin_base.dataintegration.entity import (
     EntitySchema,
 )
 from cmem_plugin_base.dataintegration.parameter.password import Password
+from cmem_plugin_base.dataintegration.ports import FixedSchemaPort, UnknownSchemaPort
 from cmem_plugin_base.testing import TestSystemContext
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
-from cmem_plugin_graphql.workflow.utils import is_jinja_template
+from cmem_plugin_graphql.workflow.utils import is_jinja_template, output_schema_from_query
 
 GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
 
@@ -226,6 +227,94 @@ def test_process_entities_yields_none_on_transport_error() -> None:
         graphql_variable_values='{"id" : {{ id }}}',
     )
     assert list(plugin.process_entities(id_entities(1))) == [None]
+
+
+def test_execution_without_a_query_sent_returns_no_entities() -> None:
+    """Test that a run which sent nothing still answers on the output port.
+
+    A Jinja template in the variables with no input connected queries nothing at all,
+    so there is no response to read a schema off.
+    """
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : {{ id }}}',
+    )
+    entities = plugin.execute([], StubExecutionContext())
+    assert list(entities.entities) == []
+    assert [path.path for path in entities.schema.paths] == ["fruit"]
+
+
+def test_output_schema_names_the_fields_the_query_asks_for() -> None:
+    """Test that the top level of the query becomes the schema paths"""
+    schema = output_schema_from_query("query { fruit(id:1) { id } tree(id:2) { name } version }")
+    assert schema is not None
+    assert [(p.path, p.is_relation) for p in schema.paths] == [
+        ("fruit", True),
+        ("tree", True),
+        ("version", False),
+    ]
+
+
+def test_output_schema_uses_the_alias_a_field_is_given() -> None:
+    """Test that an aliased field is named by its alias, which is the key in the response"""
+    schema = output_schema_from_query("query { a: fruit(id:1) { id } b: fruit(id:2) { id } }")
+    assert schema is not None
+    assert [p.path for p in schema.paths] == ["a", "b"]
+
+
+def test_output_schema_declares_every_path_as_multi_valued() -> None:
+    """Test that cardinality, which the query does not state, is never declared as single"""
+    schema = output_schema_from_query(FRUIT_QUERY)
+    assert schema is not None
+    assert all(not path.is_single_value for path in schema.paths)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("query manzana{fruit(id: {{ id }}){id}}", id="jinja placeholder"),
+        pytest.param(
+            "query A { fruit(id:1){id} } query B { fruit(id:2){id} }", id="two operations"
+        ),
+        pytest.param("query { ...f } fragment f on Query { fruit(id:1){id} }", id="root fragment"),
+    ],
+)
+def test_output_schema_is_undecidable_for(query: str) -> None:
+    """Test that a query which does not describe its response answers None"""
+    assert output_schema_from_query(query) is None
+
+
+def test_output_port_is_fixed_when_the_query_describes_its_response() -> None:
+    """Test that a plain query offers its schema to the next task"""
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
+    assert isinstance(plugin.output_port, FixedSchemaPort)
+    assert [path.path for path in plugin.output_port.schema.paths] == ["fruit"]
+
+
+def test_output_port_is_unknown_when_the_query_does_not() -> None:
+    """Test that a query only settled at runtime offers no schema"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL, graphql_query="query manzana{fruit(id: {{ id }}){id}}"
+    )
+    assert isinstance(plugin.output_port, UnknownSchemaPort)
+
+
+def test_declared_schema_matches_the_response() -> None:
+    """Test that the paths promised before the call are the paths the endpoint answers with.
+
+    Only the names are compared: ``is_single_value`` is deliberately declared as
+    multi valued, while the entity builder reads the actual cardinality off the
+    response and says ``True`` for a field that happened to answer with one object.
+    """
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
+    entities = plugin.execute([], StubExecutionContext())
+    assert [path.path for path in plugin.output_port.schema.paths] == [
+        path.path for path in entities.schema.paths
+    ]
+    assert [path.is_relation for path in plugin.output_port.schema.paths] == [
+        path.is_relation for path in entities.schema.paths
+    ]
 
 
 def test_is_string_jinja_template() -> None:

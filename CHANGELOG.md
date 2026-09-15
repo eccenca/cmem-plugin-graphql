@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
 - The result always leaves on the output port now, one entity per query execution
+- The output schema is derived from **Query** wherever the query describes its own
+  response, so the paths are offered to the next task while the workflow is drawn
+  instead of only becoming known once the task has run. A query that does not parse
+  as GraphQL on its own - which a Jinja template usually does not - one holding
+  several operations, and one whose top level is a fragment still offer an unknown
+  schema. Because a query does not say how many values a field carries, every path
+  is offered as possibly multi valued
 - The task no longer talks to Corporate Memory at all
 
 ### Removed

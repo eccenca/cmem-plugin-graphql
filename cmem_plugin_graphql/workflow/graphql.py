@@ -8,13 +8,14 @@ import jinja2
 import validators
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
-from cmem_plugin_base.dataintegration.entity import Entities
+from cmem_plugin_base.dataintegration.entity import Entities, EntitySchema
 from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
 )
 from cmem_plugin_base.dataintegration.parameter.password import Password, PasswordParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.ports import (
+    FixedSchemaPort,
     UnknownSchemaPort,
 )
 from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
@@ -26,7 +27,11 @@ from graphql import GraphQLError, GraphQLSyntaxError
 from cmem_plugin_graphql.workflow.utils import (
     get_dict,
     is_jinja_template,
+    output_schema_from_query,
 )
+
+# The schema of a run that sent no query at all and so has nothing to describe.
+EMPTY_SCHEMA = EntitySchema(type_uri="", paths=[])
 
 
 @Plugin(
@@ -44,8 +49,22 @@ purely static query and variables text runs exactly once and ignores any
 connected input entirely.
 
 The collected responses leave on the output port, one entity per query
-execution. Their paths are the fields the response carries, so a downstream
-task has to accept the schema as it comes.
+execution. The fields a response carries are the fields **Query** asks for, so
+the output schema is known before the endpoint is called and is offered to the
+next task while the workflow is drawn: each field selected at the top level of
+the query becomes a path, under its alias where it has one, and a field that
+selects sub fields becomes a relation whose own paths follow from the response.
+
+How *many* values a field carries is not part of the query - it is in the
+endpoint's own schema - so every path is offered as possibly multi valued, even
+where the endpoint only ever answers with one.
+
+Three kinds of query describe no schema in advance, and the task then offers an
+unknown one instead, which a downstream task has to accept as it comes: a
+**Query** that does not parse as GraphQL on its own, which is the usual case
+for a Jinja template because the placeholders sit where GraphQL expects values;
+a query holding more than one operation; and one whose top level is a fragment
+rather than plain fields.
 
 A Jinja-templated **Query** or **Query variables** is never checked for GraphQL
 syntax errors until it is actually rendered - a mistake in it only surfaces at
@@ -222,7 +241,12 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
-        return build_entities_from_data(payload)
+        # An empty payload carries no shape to read a schema off, so build_entities_from_data
+        # answers None rather than an empty collection.
+        entities = build_entities_from_data(payload)
+        if entities is None:
+            return Entities(entities=iter([]), schema=self.output_schema or EMPTY_SCHEMA)
+        return entities
 
     def _create_client(self) -> Client:
         """Create a GraphQL client for the configured endpoint
@@ -268,4 +292,9 @@ class GraphQLPlugin(WorkflowPlugin):
 
     def _set_ports(self) -> None:
         """Define input/output ports based on the configuration"""
-        self.output_port = UnknownSchemaPort()
+        self.output_schema = output_schema_from_query(self.graphql_query)
+        self.output_port = (
+            FixedSchemaPort(schema=self.output_schema)
+            if self.output_schema
+            else UnknownSchemaPort()
+        )

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/)
 
+## [Unreleased]
+
+### Changed
+
+- Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
+
+
 ## [6.0.1] 2026-09-08
 
 ### Changed

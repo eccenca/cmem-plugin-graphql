@@ -106,10 +106,6 @@ since a file travels through those without being taken apart on the way.
 - **Jinja text is never checked for GraphQL syntax errors until it is rendered**, so a
   mistake in it surfaces while the task runs, as a failed entity, rather than as a
   configuration error while the task is set up.
-- **A Jinja-templated query with nothing connected as input takes the task down**: the
-  `{{ ... }}` text is sent to the endpoint unrendered.
-- **Jinja-templated variables with nothing connected send no query at all**, and the task
-  completes as though there had been nothing to do.
 """,
     parameters=[
         PluginParameter(

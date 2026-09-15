@@ -42,51 +42,52 @@ EMPTY_SCHEMA = EntitySchema(type_uri="", paths=[])
     documentation="""This task sends a GraphQL query or mutation to an endpoint and
 captures the response.
 
-An input port accepts entities, but it only changes anything when **Query** or
-**Query variables** actually contains Jinja syntax: the query and variables are
-then rendered once per input entity and the endpoint is called once per entity,
-with a failed entity logged and skipped rather than failing the whole task. A
-purely static query and variables text runs exactly once and ignores any
-connected input entirely.
+Jinja syntax in the query or in the variables turns the task into a loop: both
+are rendered once per arriving entity and the endpoint is called once per
+entity, with a failing entity logged, counted in the report and skipped rather
+than taking the whole task down. Text without Jinja syntax is sent exactly
+once, and anything connected as input is then ignored.
 
-The collected responses leave on the output port, one entity per query
-execution. The fields a response carries are the fields **Query** asks for, so
-the output schema is known before the endpoint is called and is offered to the
-next task while the workflow is drawn: each field selected at the top level of
-the query becomes a path, under its alias where it has one, and a field that
-selects sub fields becomes a relation whose own paths follow from the response.
+The responses leave on the output port, one entity per call. Their paths are
+the fields the query asks for, under the alias where a field has one, so the
+next task is offered the schema while the workflow is drawn rather than only
+after a first run. A field that selects sub fields becomes a relation, and the
+entities behind it follow the shape of the response.
 
-How *many* values a field carries is not part of the query - it is in the
-endpoint's own schema - so every path is offered as possibly multi valued, even
-where the endpoint only ever answers with one.
+How many values a field carries is not part of a query - that lives in the
+endpoint's own schema - so every path is offered as possibly multi valued and
+the entities are built to match. A field the endpoint answers with a single
+object therefore arrives as a list holding one entity, and a JSON dataset
+connected to the output port holds an array in that place.
 
-Three kinds of query describe no schema in advance, and the task then offers an
-unknown one instead, which a downstream task has to accept as it comes: a
-**Query** that does not parse as GraphQL on its own, which is the usual case
-for a Jinja template because the placeholders sit where GraphQL expects values;
-a query holding more than one operation; and one whose top level is a fragment
-rather than plain fields.
+The task usually opens a chain: a GraphQL API at one end, and at the other a
+transform that maps the response into a graph, or a dataset that keeps it for
+later steps.
 
-A Jinja-templated **Query** or **Query variables** is never checked for GraphQL
-syntax errors until it is actually rendered - a mistake in it only surfaces at
-runtime, as a failed entity, rather than as a configuration error when the task
-is set up. If **Query** contains Jinja syntax and no input is connected at all,
-the unrendered `{{ ... }}` text is sent to the GraphQL library as literal
-syntax and the task fails outright. If only **Query variables** contains Jinja
-syntax while **Query** is static, and no input is connected, the task instead
-sends nothing and completes as if zero entities were processed, without
-warning that the variables were never rendered.
+Three kinds of query describe nothing in advance, and the schema then stays
+unknown until the task has run, which the next task has to accept as it comes:
+one that does not parse as GraphQL on its own, which is the usual case for a
+Jinja template because the placeholders sit where GraphQL expects values; one
+holding more than one operation; and one whose top level is a fragment rather
+than plain fields.
+
+Jinja text is never checked for GraphQL syntax errors until it is rendered, so
+a mistake in it surfaces while the task runs, as a failed entity, rather than
+as a configuration error while it is set up. Two combinations go wrong quietly
+in opposite ways when nothing is connected to the input: a Jinja-templated
+query is sent with its `{{ ... }}` text unrendered and takes the task down,
+while Jinja-templated variables send no query at all and the task completes as
+though there had been nothing to do.
 """,
     parameters=[
         PluginParameter(
             name="graphql_url",
             label="Endpoint",
-            description="""The URL of the GraphQL endpoint you want to query.
+            description="""The URL the query is sent to, for example
+`https://fruits-api.netlify.app/graphql`.
 
 A collective list of public GraphQL APIs is available
 [here](https://github.com/IvanGoncharov/graphql-apis).
-
-Example Endpoint: `https://fruits-api.netlify.app/graphql`
 """,
         ),
         PluginParameter(
@@ -105,38 +106,35 @@ For GitLab, a personal, project or group access token works, with scope
         PluginParameter(
             name="graphql_query",
             label="Query",
-            description="""The query text of the GraphQL Query you want to execute.
+            description="""The query or mutation to send, written in
+[GraphQL](https://graphql.org/).
 
-GraphQL is a query language for APIs and a runtime for fulfilling those queries with
-your existing data. Learn more on GraphQL [here](https://graphql.org/).
+May contain Jinja syntax, for example `{{ id }}`, which is rendered against each
+arriving entity before the query is sent.
 
-May also contain Jinja syntax (e.g. `{{ id }}`), which is rendered against each
-input entity before the query is sent.
-
-Example Query: query allFruits {
-fruits {
+```graphql
+query allFruits {
+  fruits {
     id
     scientific_name
-    tree_name
     fruit_name
     family
-    origin
-    description
     climatic_zone
-    }
+  }
 }
+```
 """,
             param_type=MultilineStringParameterType(),
         ),
         PluginParameter(
             name="graphql_variable_values",
             label="Query variables",
-            description="""Pass dynamic variables when making a query or mutation.
+            description="""The values for the variables the query declares, as a JSON
+object - `{"id": 1}` for a query taking `$id`. An empty object is sent for a query
+that declares none.
 
-May also contain Jinja syntax (e.g. `{"id": {{ id }}}`), which is rendered
-against each input entity before the query is sent.
-
-Example Variables: `{"id" : 1}`
+May contain Jinja syntax, for example `{"id": {{ id }}}`, which is rendered against
+each arriving entity before the query is sent.
 """,
             default_value="{}",
             param_type=MultilineStringParameterType(),

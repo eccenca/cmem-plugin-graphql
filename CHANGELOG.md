@@ -28,6 +28,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   dataset connected to the output port therefore holds an array wherever the
   endpoint answered with one object
 
+- Reworked the task and parameter documentation for the reshaped task: it describes what
+  leaves on the output port and how the schema follows from the query, says where the task
+  sits in a chain, and keeps the Jinja caveats. The **Endpoint**, **Query** and **Query
+  variables** descriptions lead with what the parameter controls, and the query example
+  renders as a code block
+
 ### Fixed
 
 - A field the endpoint answers with null for some items and with an object for others

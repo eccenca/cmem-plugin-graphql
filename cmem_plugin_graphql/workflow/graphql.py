@@ -90,6 +90,19 @@ Example Endpoint: `https://fruits-api.netlify.app/graphql`
 """,
         ),
         PluginParameter(
+            name="access_token",
+            label="Access token",
+            description="""The token the endpoint is authenticated with. It is sent as the
+`Authorization: Bearer <token>` header. Leave it empty for an endpoint that needs no
+authentication.
+
+For GitLab, a personal, project or group access token works, with scope
+`read_api` for queries or `api` for mutations.
+""",
+            param_type=PasswordParameterType(),
+            default_value="",
+        ),
+        PluginParameter(
             name="graphql_query",
             label="Query",
             description="""The query text of the GraphQL Query you want to execute.
@@ -128,30 +141,21 @@ Example Variables: `{"id" : 1}`
             default_value="{}",
             param_type=MultilineStringParameterType(),
         ),
-        PluginParameter(
-            name="access_token",
-            label="Access token",
-            description="""The token the endpoint is authenticated with. It is sent as the
-`Authorization: Bearer <token>` header.
-
-For GitLab, a personal, project or group access token works, with scope
-`read_api` for queries or `api` for mutations.
-""",
-            param_type=PasswordParameterType(),
-            advanced=True,
-            default_value="",
-        ),
     ],
 )
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
+    # DataIntegration renders the parameters in the order of this signature rather than
+    # the order of the decorator, so Access token sits here to appear under Endpoint. It
+    # carries no Python default because it precedes a parameter that has none; the
+    # PluginParameter declares `default_value` instead, which is what makes it optional.
     def __init__(
         self,
         graphql_url: str,
+        access_token: Password | str,
         graphql_query: str,
         graphql_variable_values: str = "",
-        access_token: Password | str = "",
     ) -> None:
         self.graphql_query: str = ""
         self.graphql_variable_values: str = ""

@@ -1,9 +1,12 @@
 """Plugin tests."""
 
+import json
 import os
+from pathlib import Path
 
 import pytest
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ReportContext
+from cmem_plugin_base.dataintegration.discovery import discover_plugins
 from cmem_plugin_base.dataintegration.entity import (
     Entities,
     Entity,
@@ -12,9 +15,10 @@ from cmem_plugin_base.dataintegration.entity import (
 )
 from cmem_plugin_base.dataintegration.parameter.password import Password
 from cmem_plugin_base.dataintegration.ports import FixedSchemaPort, UnknownSchemaPort
+from cmem_plugin_base.dataintegration.typed_entities.file import FileEntitySchema
 from cmem_plugin_base.testing import TestSystemContext
 
-from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
+from cmem_plugin_graphql.workflow.graphql import OUTPUT, RESULT_FILE_NAME, GraphQLPlugin
 from cmem_plugin_graphql.workflow.utils import (
     entities_from_payload,
     is_jinja_template,
@@ -52,6 +56,28 @@ def password(value: str) -> Password:
     constructs nothing user-bound, so this needs no Corporate Memory deployment.
     """
     return Password(TestSystemContext().encrypt(value), TestSystemContext())
+
+
+def build_plugin(
+    graphql_query: str,
+    graphql_url: str = GRAPHQL_URL,
+    access_token: Password | str = "",
+    output_mode: str = OUTPUT.entities,
+    graphql_variable_values: str = "",
+) -> GraphQLPlugin:
+    """Build the plugin against the test endpoint, with the boring arguments filled in.
+
+    ``access_token`` and ``output_mode`` carry no Python default in the plugin itself -
+    they precede a parameter that has none - so a test indifferent to either would
+    otherwise have to repeat both at every call.
+    """
+    return GraphQLPlugin(
+        graphql_url=graphql_url,
+        access_token=access_token,
+        output_mode=output_mode,
+        graphql_query=graphql_query,
+        graphql_variable_values=graphql_variable_values,
+    )
 
 
 FRUIT_QUERY = "query{fruit(id:1){id,fruit_name}}"
@@ -142,15 +168,13 @@ def assert_is_added_apple(entities: Entities) -> None:
 
 def test_execution() -> None:
     """Test a plain query against the endpoint"""
-    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=FRUIT_QUERY)
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
     assert_is_manzana(plugin.execute([], StubExecutionContext()))
 
 
 def test_execution_with_variables() -> None:
     """Test a query with static variables"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : 1}',
     )
@@ -159,9 +183,7 @@ def test_execution_with_variables() -> None:
 
 def test_execution_with_jinja_template() -> None:
     """Test that a Jinja template in the variables queries once per input entity"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
@@ -170,9 +192,7 @@ def test_execution_with_jinja_template() -> None:
 
 def test_execution_preserves_unicode_characters() -> None:
     """Test that non-ASCII characters from the GraphQL response reach the entities intact"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query="query{fruit(id:4){id,scientific_name,fruit_name,family}}",
     )
     entities = plugin.execute([], StubExecutionContext())
@@ -190,17 +210,13 @@ def test_execution_preserves_unicode_characters() -> None:
 
 def test_mutation() -> None:
     """Test a mutation without variables"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, access_token="", graphql_query=ADD_FRUIT_MUTATION
-    )
+    plugin = build_plugin(graphql_query=ADD_FRUIT_MUTATION)
     assert_is_added_apple(plugin.execute([], StubExecutionContext()))
 
 
 def test_mutation_with_variables() -> None:
     """Test a mutation with static variables"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=ADD_FRUIT_MUTATION_WITH_VARIABLES,
         graphql_variable_values='{"id" : 1, "fruit_name": "Apple"}',
     )
@@ -209,9 +225,7 @@ def test_mutation_with_variables() -> None:
 
 def test_mutation_with_jinja_template() -> None:
     """Test a mutation whose variables are rendered from an input entity"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=ADD_FRUIT_MUTATION_WITH_VARIABLES,
         graphql_variable_values='{"id" : {{ id }}, "fruit_name": "Apple"}',
     )
@@ -220,9 +234,7 @@ def test_mutation_with_jinja_template() -> None:
 
 def test_process_entities_renders_jinja_variables() -> None:
     """Test that Jinja variables are rendered from the input entities"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
@@ -233,9 +245,8 @@ def test_process_entities_renders_jinja_variables() -> None:
 
 def test_process_entities_yields_none_on_transport_error() -> None:
     """Test that an unreachable endpoint fails the entity instead of the whole task"""
-    plugin = GraphQLPlugin(
+    plugin = build_plugin(
         graphql_url="https://127.0.0.1:1/graphql",
-        access_token="",
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
@@ -248,9 +259,7 @@ def test_execution_without_a_query_sent_returns_no_entities() -> None:
     A Jinja template in the variables with no input connected queries nothing at all,
     so there is no response to read a schema off.
     """
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query=FRUIT_QUERY_WITH_VARIABLE,
         graphql_variable_values='{"id" : {{ id }}}',
     )
@@ -301,16 +310,14 @@ def test_output_schema_is_undecidable_for(query: str) -> None:
 
 def test_output_port_is_fixed_when_the_query_describes_its_response() -> None:
     """Test that a plain query offers its schema to the next task"""
-    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=FRUIT_QUERY)
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
     assert isinstance(plugin.output_port, FixedSchemaPort)
     assert [path.path for path in plugin.output_port.schema.paths] == ["fruit"]
 
 
 def test_output_port_is_unknown_when_the_query_does_not() -> None:
     """Test that a query only settled at runtime offers no schema"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL,
-        access_token="",
+    plugin = build_plugin(
         graphql_query="query manzana{fruit(id: {{ id }}){id}}",
     )
     assert isinstance(plugin.output_port, UnknownSchemaPort)
@@ -325,14 +332,14 @@ def test_declared_schema_is_the_schema_of_the_entities() -> None:
     one object, which is the case that mismatched while the entities were built from
     the response rather than from the declaration.
     """
-    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=FRUIT_QUERY)
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
     entities = plugin.execute([], StubExecutionContext())
     assert entities.schema == plugin.output_port.schema
 
 
 def test_a_relation_path_carries_sub_entity_uris() -> None:
     """Test that a path declared as a relation answers with a list of URIs to resolve"""
-    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=FRUIT_QUERY)
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
     entities = plugin.execute([], StubExecutionContext())
     uris = [value for entity in entities.entities for value in entity.values]
     assert uris == [[entity.uri for entity in entities.sub_entities[0].entities]]
@@ -405,24 +412,22 @@ def test_validate_invalid_inputs() -> None:
 
     # Invalid URL
     with pytest.raises(ValueError, match=r"Provide a valid GraphQL URL."):
-        GraphQLPlugin(graphql_url=invalid_url, access_token="", graphql_query=query)
+        build_plugin(graphql_url=invalid_url, graphql_query=query)
 
     # Invalid query
     with pytest.raises(ValueError, match=r"Query string is not Valid"):
-        GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=invalid_query)
+        build_plugin(graphql_query=invalid_query)
 
 
 def test_access_token_is_sent_as_bearer_header() -> None:
     """Test that the access token becomes an Authorization header"""
-    plugin = GraphQLPlugin(
-        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, access_token=password(CONFIGURED_VALUE)
-    )
+    plugin = build_plugin(graphql_query=FRUIT_QUERY, access_token=password(CONFIGURED_VALUE))
     assert plugin.headers == {"Authorization": f"Bearer {CONFIGURED_VALUE}"}
 
 
 def test_no_token_sends_no_authorization_header() -> None:
     """Test that no header is sent when no token is configured"""
-    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, access_token="", graphql_query=FRUIT_QUERY)
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
     assert plugin.headers == {}
 
 
@@ -434,7 +439,7 @@ def test_gitlab_query_with_access_token() -> None:
     token belongs to, so a non-empty username proves the header was honoured rather
     than only that the endpoint could be reached.
     """
-    plugin = GraphQLPlugin(
+    plugin = build_plugin(
         graphql_url=GITLAB_URL,
         graphql_query="query { currentUser { username } }",
         access_token=password(GITLAB_TOKEN),
@@ -446,3 +451,62 @@ def test_gitlab_query_with_access_token() -> None:
     usernames = [entity.values[0][0] for entity in current_user.entities]
     assert len(usernames) == 1
     assert usernames[0]
+
+
+def test_file_mode_hands_on_one_json_file() -> None:
+    """Test that the file shape writes the responses and hands the file on"""
+    plugin = build_plugin(graphql_query=FRUIT_QUERY, output_mode=OUTPUT.file)
+    entities = plugin.execute([], StubExecutionContext())
+    assert entities.schema.type_uri == FileEntitySchema().type_uri
+    files = [FileEntitySchema().from_entity(entity) for entity in entities.entities]
+    assert len(files) == 1
+    assert Path(files[0].path).name == RESULT_FILE_NAME
+    assert files[0].mime == "application/json"
+    assert json.loads(Path(files[0].path).read_text(encoding="utf-8")) == [
+        {"fruit": {"id": "1", "fruit_name": "Manzana"}}
+    ]
+
+
+def test_file_mode_writes_non_ascii_as_text() -> None:
+    """Test that the written file keeps non-ASCII characters instead of escaping them"""
+    plugin = build_plugin(
+        graphql_query="query{fruit(id:4){fruit_name,family}}", output_mode=OUTPUT.file
+    )
+    entities = plugin.execute([], StubExecutionContext())
+    file = FileEntitySchema().from_entity(next(iter(entities.entities)))
+    content = Path(file.path).read_text(encoding="utf-8")
+    assert "Limón" in content
+    assert "\\u00f3" not in content
+
+
+def test_file_mode_offers_the_file_schema_whatever_the_query() -> None:
+    """Test that the port describes a file, including for a query with no derivable schema"""
+    for query in (FRUIT_QUERY, "query manzana{fruit(id: {{ id }}){id}}"):
+        plugin = build_plugin(graphql_query=query, output_mode=OUTPUT.file)
+        assert isinstance(plugin.output_port, FixedSchemaPort)
+        assert plugin.output_port.schema.type_uri == FileEntitySchema().type_uri
+
+
+def test_an_unknown_output_mode_is_rejected() -> None:
+    """Test that a mode outside the choices fails while the task is built"""
+    with pytest.raises(ValueError, match=r"Provide a valid output mode"):
+        build_plugin(graphql_query=FRUIT_QUERY, output_mode="dataset")
+
+
+def test_the_parameters_are_offered_in_the_intended_order() -> None:
+    """Test the parameter surface DataIntegration renders.
+
+    The order follows the constructor signature rather than the decorator, and both
+    optional parameters precede one that has no default, so neither can carry a Python
+    default - it is ``default_value`` here that keeps them out of the required set.
+    """
+    plugin = next(
+        _ for _ in discover_plugins("cmem_plugin_graphql").plugins if _.label == "GraphQL query"
+    )
+    assert [(_.name, _.advanced, _.default_value) for _ in plugin.parameters] == [
+        ("graphql_url", False, None),
+        ("access_token", False, ""),
+        ("output_mode", False, OUTPUT.entities),
+        ("graphql_query", False, None),
+        ("graphql_variable_values", False, "{}"),
+    ]

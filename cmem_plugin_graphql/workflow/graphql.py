@@ -1,7 +1,11 @@
 """GraphQL workflow plugin module"""
 
 import json
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
+from pathlib import Path
+from tempfile import mkdtemp
+from types import SimpleNamespace
 from typing import Any
 
 import jinja2
@@ -9,6 +13,7 @@ import validators
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.entity import Entities, EntitySchema
+from cmem_plugin_base.dataintegration.parameter.choice import ChoiceParameterType
 from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
 )
@@ -18,6 +23,7 @@ from cmem_plugin_base.dataintegration.ports import (
     FixedSchemaPort,
     UnknownSchemaPort,
 )
+from cmem_plugin_base.dataintegration.typed_entities.file import FileEntitySchema, LocalFile
 from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -34,6 +40,20 @@ from cmem_plugin_graphql.workflow.utils import (
 # The schema of a run that sent no query at all and so has nothing to describe.
 EMPTY_SCHEMA = EntitySchema(type_uri="", paths=[])
 
+OUTPUT = SimpleNamespace()
+OUTPUT.entities = "entities"
+OUTPUT.file = "file"
+OUTPUT.options = OrderedDict(
+    {
+        OUTPUT.entities: f"{OUTPUT.entities} - the responses as entities, to map or transform",
+        OUTPUT.file: f"{OUTPUT.file} - the responses as one JSON file, to store or upload",
+    }
+)
+
+# The name the written file carries. A response is not a file at the endpoint, so there is
+# no name to take from it, and a temporary file's own name is noise in a later task.
+RESULT_FILE_NAME = "graphql-result.json"
+
 
 @Plugin(
     label="GraphQL query",
@@ -48,11 +68,13 @@ entity, with a failing entity logged, counted in the report and skipped rather
 than taking the whole task down. Text without Jinja syntax is sent exactly
 once, and anything connected as input is then ignored.
 
-The responses leave on the output port, one entity per call. Their paths are
-the fields the query asks for, under the alias where a field has one, so the
-next task is offered the schema while the workflow is drawn rather than only
-after a first run. A field that selects sub fields becomes a relation, and the
-entities behind it follow the shape of the response.
+The responses leave on the output port in one of two shapes. As entities, one
+per call, their paths are the fields the query asks for, under the alias where
+a field has one, so the next task is offered the schema while the workflow is
+drawn rather than only after a first run; a field that selects sub fields
+becomes a relation, and the entities behind it follow the shape of the
+response. As a file, all responses of the run are written to a single JSON
+file, and what leaves the port is that one file rather than the data in it.
 
 How many values a field carries is not part of a query - that lives in the
 endpoint's own schema - so every path is offered as possibly multi valued and
@@ -62,14 +84,17 @@ connected to the output port holds an array in that place.
 
 The task usually opens a chain: a GraphQL API at one end, and at the other a
 transform that maps the response into a graph, or a dataset that keeps it for
-later steps.
+later steps. The file shape suits the second kind of chain, and a task that
+uploads or stores what it is handed, since a file travels through those without
+being taken apart on the way.
 
-Three kinds of query describe nothing in advance, and the schema then stays
-unknown until the task has run, which the next task has to accept as it comes:
-one that does not parse as GraphQL on its own, which is the usual case for a
-Jinja template because the placeholders sit where GraphQL expects values; one
-holding more than one operation; and one whose top level is a fragment rather
-than plain fields.
+Three kinds of query describe nothing in advance, and the entities then leave
+with a schema that stays unknown until the task has run, which the next task
+has to accept as it comes: one that does not parse as GraphQL on its own, which
+is the usual case for a Jinja template because the placeholders sit where
+GraphQL expects values; one holding more than one operation; and one whose top
+level is a fragment rather than plain fields. A run that hands on a file is not
+affected, since a file is described the same way whatever the query asks for.
 
 Jinja text is never checked for GraphQL syntax errors until it is rendered, so
 a mistake in it surfaces while the task runs, as a failed entity, rather than
@@ -102,6 +127,13 @@ For GitLab, a personal, project or group access token works, with scope
 """,
             param_type=PasswordParameterType(),
             default_value="",
+        ),
+        PluginParameter(
+            name="output_mode",
+            label="Output mode",
+            description="In which shape the responses leave this task.",
+            param_type=ChoiceParameterType(OUTPUT.options),
+            default_value=OUTPUT.entities,
         ),
         PluginParameter(
             name="graphql_query",
@@ -145,13 +177,15 @@ class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
     # DataIntegration renders the parameters in the order of this signature rather than
-    # the order of the decorator, so Access token sits here to appear under Endpoint. It
-    # carries no Python default because it precedes a parameter that has none; the
-    # PluginParameter declares `default_value` instead, which is what makes it optional.
+    # the order of the decorator, so Access token and Output mode sit here to appear
+    # under Endpoint. Neither carries a Python default, because both precede a parameter
+    # that has none; their PluginParameter declares `default_value` instead, which is
+    # what DataIntegration reads and what keeps them optional.
     def __init__(
         self,
         graphql_url: str,
         access_token: Password | str,
+        output_mode: str,
         graphql_query: str,
         graphql_variable_values: str = "",
     ) -> None:
@@ -162,6 +196,10 @@ class GraphQLPlugin(WorkflowPlugin):
 
         if not validators.url(graphql_url):
             raise ValueError("Provide a valid GraphQL URL.")
+
+        if output_mode not in OUTPUT.options:
+            raise ValueError(f"Provide a valid output mode: {', '.join(OUTPUT.options)}.")
+        self.output_mode = output_mode
 
         self.graphql_url = graphql_url
         self.set_graphql_query(graphql_query)
@@ -244,6 +282,8 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
+        if self.output_mode == OUTPUT.file:
+            return self._result_file(payload)
         if self.output_schema:
             # The declared schema has to hold for whatever came back, so the entities are
             # built to match it rather than read off the response.
@@ -254,6 +294,20 @@ class GraphQLPlugin(WorkflowPlugin):
         if entities is None:
             return Entities(entities=iter([]), schema=EMPTY_SCHEMA)
         return entities
+
+    def _result_file(self, payload: list[dict[str, Any]]) -> Entities:
+        """Write the collected responses to one JSON file and hand it on as a file entity
+
+        The file is written into a directory of its own so it can carry a name that says
+        what it holds, and `ensure_ascii` stays off so a response with non-ASCII text
+        reaches the file as that text rather than as escape sequences.
+        """
+        path = Path(mkdtemp()) / RESULT_FILE_NAME
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.log.info(f"Wrote the responses to {path}.")
+        schema = FileEntitySchema()
+        file = LocalFile(path=str(path), mime="application/json")
+        return Entities(entities=iter([schema.to_entity(file)]), schema=schema)
 
     def _create_client(self) -> Client:
         """Create a GraphQL client for the configured endpoint
@@ -300,6 +354,9 @@ class GraphQLPlugin(WorkflowPlugin):
     def _set_ports(self) -> None:
         """Define input/output ports based on the configuration"""
         self.output_schema = output_schema_from_query(self.graphql_query)
+        if self.output_mode == OUTPUT.file:
+            self.output_port = FixedSchemaPort(schema=FileEntitySchema())
+            return
         self.output_port = (
             FixedSchemaPort(schema=self.output_schema)
             if self.output_schema

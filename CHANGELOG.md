@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - New **Access token** parameter, which holds the token encrypted instead of in plain text
   and is sent as the `Authorization: Bearer <token>` header - a GitLab personal, project or
   group access token works with it
+- New **Output mode** parameter choosing the shape the responses leave in: `entities`, the
+  default and what the task did so far, or `file`, which writes all responses of the run
+  to one JSON file and hands that file on instead. The file shape suits a chain that
+  stores or uploads the result rather than mapping it
 
 ### Changed
 

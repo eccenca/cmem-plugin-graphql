@@ -62,47 +62,54 @@ RESULT_FILE_NAME = "graphql-result.json"
     documentation="""This task sends a GraphQL query or mutation to an endpoint and
 captures the response.
 
-Jinja syntax in the query or in the variables turns the task into a loop: both
-are rendered once per arriving entity and the endpoint is called once per
-entity, with a failing entity logged, counted in the report and skipped rather
-than taking the whole task down. Text without Jinja syntax is sent exactly
-once, and anything connected as input is then ignored.
+## How often the endpoint is called
 
-The responses leave on the output port in one of two shapes. As entities, one
-per call, their paths are the fields the query asks for, under the alias where
-a field has one, so the next task is offered the schema while the workflow is
-drawn rather than only after a first run; a field that selects sub fields
-becomes a relation, and the entities behind it follow the shape of the
-response. As a file, all responses of the run are written to a single JSON
-file, and what leaves the port is that one file rather than the data in it.
+Jinja syntax in the query or in the variables turns the task into a loop: both are
+rendered once per arriving entity and the endpoint is called once per entity, with a
+failing entity logged, counted in the report and skipped rather than taking the whole
+task down. Text without Jinja syntax is sent exactly once, and anything connected as
+input is then ignored.
 
-How many values a field carries is not part of a query - that lives in the
-endpoint's own schema - so every path is offered as possibly multi valued and
-the entities are built to match. A field the endpoint answers with a single
-object therefore arrives as a list holding one entity, and a JSON dataset
-connected to the output port holds an array in that place.
+## What leaves the task
 
-The task usually opens a chain: a GraphQL API at one end, and at the other a
-transform that maps the response into a graph, or a dataset that keeps it for
-later steps. The file shape suits the second kind of chain, and a task that
-uploads or stores what it is handed, since a file travels through those without
-being taken apart on the way.
+The responses leave on the output port in one of two shapes:
 
-Three kinds of query describe nothing in advance, and the entities then leave
-with a schema that stays unknown until the task has run, which the next task
-has to accept as it comes: one that does not parse as GraphQL on its own, which
-is the usual case for a Jinja template because the placeholders sit where
-GraphQL expects values; one holding more than one operation; and one whose top
-level is a fragment rather than plain fields. A run that hands on a file is not
-affected, since a file is described the same way whatever the query asks for.
+- **entities**: one per call. Their paths are the fields the query asks for, under the
+  alias where a field has one, so the next task is offered the schema while the workflow
+  is drawn rather than only after a first run. A field that selects sub fields becomes a
+  relation, and the entities behind it follow the shape of the response.
+- **file**: all responses of the run written to a single JSON file. What leaves the port
+  is that one file rather than the data in it.
 
-Jinja text is never checked for GraphQL syntax errors until it is rendered, so
-a mistake in it surfaces while the task runs, as a failed entity, rather than
-as a configuration error while it is set up. Two combinations go wrong quietly
-in opposite ways when nothing is connected to the input: a Jinja-templated
-query is sent with its `{{ ... }}` text unrendered and takes the task down,
-while Jinja-templated variables send no query at all and the task completes as
-though there had been nothing to do.
+How many values a field carries is not part of a query - that lives in the endpoint's own
+schema - so every path is offered as possibly multi valued and the entities are built to
+match. A field the endpoint answers with a single object therefore arrives as a list
+holding one entity, and a JSON dataset connected to the output port holds an array in
+that place.
+
+## Where this task fits
+
+The task usually opens a chain: a GraphQL API at one end, and at the other a transform
+that maps the response into a graph, or a dataset that keeps it for later steps. The file
+shape suits the second kind of chain, and a task that uploads or stores what it is handed,
+since a file travels through those without being taken apart on the way.
+
+## Caveats
+
+- **Three kinds of query describe nothing in advance**, and the entities then leave with a
+  schema that stays unknown until the task has run, which the next task has to accept as
+  it comes: one that does not parse as GraphQL on its own, which is the usual case for a
+  Jinja template because the placeholders sit where GraphQL expects values; one holding
+  more than one operation; and one whose top level is a fragment rather than plain fields.
+  A run that hands on a file is not affected, since a file is described the same way
+  whatever the query asks for.
+- **Jinja text is never checked for GraphQL syntax errors until it is rendered**, so a
+  mistake in it surfaces while the task runs, as a failed entity, rather than as a
+  configuration error while the task is set up.
+- **A Jinja-templated query with nothing connected as input takes the task down**: the
+  `{{ ... }}` text is sent to the endpoint unrendered.
+- **Jinja-templated variables with nothing connected send no query at all**, and the task
+  completes as though there had been nothing to do.
 """,
     parameters=[
         PluginParameter(

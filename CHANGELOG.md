@@ -34,9 +34,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Reworked the task and parameter documentation for the reshaped task: it describes what
   leaves on the output port and how the schema follows from the query, says where the task
-  sits in a chain, and keeps the Jinja caveats. The **Endpoint**, **Query** and **Query
-  variables** descriptions lead with what the parameter controls, and the query example
-  renders as a code block
+  sits in a chain, and keeps the Jinja caveats. It is now structured under headings, with
+  the caveats as a list, so a reader can find one section without reading the rest. The
+  **Endpoint**, **Query** and **Query variables** descriptions lead with what the
+  parameter controls, and the query example renders as a code block
 
 ### Fixed
 

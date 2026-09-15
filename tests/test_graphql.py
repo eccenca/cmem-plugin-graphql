@@ -6,6 +6,7 @@ from collections.abc import Generator
 from contextlib import suppress
 from typing import Any
 
+import httpx
 import pytest
 from cmem_client.client import Client
 from cmem_client.models.dataset import Dataset
@@ -19,7 +20,6 @@ from cmem_plugin_base.dataintegration.entity import (
 )
 from cmem_plugin_base.dataintegration.parameter.password import Password
 from cmem_plugin_base.testing import TestExecutionContext, TestSystemContext
-from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
 from cmem_plugin_graphql.workflow.utils import is_jinja_template
@@ -160,7 +160,7 @@ def project() -> Generator[str]:
     client = _get_client()
 
     # Clean up any previous test project
-    with suppress(HTTPError):
+    with suppress(httpx.HTTPStatusError):
         client.projects.delete_item(PROJECT_NAME, skip_if_missing=True)
 
     # Create fresh project and dataset
@@ -408,7 +408,7 @@ def test_validate_invalid_inputs() -> None:
         )
 
     # Invalid Dateset
-    with pytest.raises(HTTPError, match=r"404 Client Error:*"):
+    with pytest.raises(httpx.HTTPStatusError, match=r"404 Not Found"):
         GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None").execute(
             [], TestExecutionContext(project_id=PROJECT_NAME)
         )

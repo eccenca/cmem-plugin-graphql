@@ -7,6 +7,7 @@ from typing import Any
 
 import jinja2
 import validators
+from cmem_plugin_base.dataintegration.client import get_client
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
 from cmem_plugin_base.dataintegration.entity import Entities
@@ -19,7 +20,6 @@ from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.ports import (
     UnknownSchemaPort,
 )
-from cmem_plugin_base.dataintegration.utils import write_to_dataset
 from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -235,9 +235,6 @@ class GraphQLPlugin(WorkflowPlugin):
     def execute(self, inputs: Sequence[Entities], context: ExecutionContext) -> Entities:
         """Execute GraphQL query"""
         self.log.info("Start GraphQL query.")
-        dataset_id = (
-            f"{context.task.project_id()}:{self.graphql_dataset}" if self.graphql_dataset else None
-        )
         processed_entities: int = 0
         failed_entities: int = 0
         payload = []
@@ -278,11 +275,13 @@ class GraphQLPlugin(WorkflowPlugin):
                 warnings=warnings,
             )
         )
-        if dataset_id:
-            write_to_dataset(
-                dataset_id,
-                io.BytesIO(json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")),
-                context=context.user,
+        if self.graphql_dataset:
+            get_client(context).datasets.post_file_resource(
+                project_id=context.task.project_id(),
+                dataset_id=self.graphql_dataset,
+                file_resource=io.BytesIO(
+                    json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+                ),
             )
 
         return build_entities_from_data(payload)

@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Changed
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
+- The result is written to the target dataset with cmem-client instead of the deprecated
+  cmempy, so an error reported when that write fails now names the request that failed
 
 ### Deprecated
 

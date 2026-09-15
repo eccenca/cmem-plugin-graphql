@@ -14,6 +14,7 @@ from cmem_plugin_base.dataintegration.parameter.dataset import DatasetParameterT
 from cmem_plugin_base.dataintegration.parameter.multiline import (
     MultilineStringParameterType,
 )
+from cmem_plugin_base.dataintegration.parameter.password import Password, PasswordParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.ports import (
     UnknownSchemaPort,
@@ -125,10 +126,28 @@ Example Variables: `{"id" : 1}`
             default_value="",
         ),
         PluginParameter(
+            name="access_token",
+            label="Access token",
+            description="""The token the endpoint is authenticated with. It is sent as the
+`Authorization: Bearer <token>` header.
+
+For GitLab, a personal, project or group access token works, with scope
+`read_api` for queries or `api` for mutations.
+""",
+            param_type=PasswordParameterType(),
+            advanced=True,
+            default_value="",
+        ),
+        PluginParameter(
             name="oauth_access_token",
-            label="OAuth access token",
-            description="Access token that connects to a GraphQL endpoint to"
-            " authorize and secure user access to resources and data.",
+            label="OAuth access token (deprecated)",
+            description="""Deprecated in favour of **Access token**, which keeps the value
+encrypted. A token configured here is used only while **Access token** is empty.
+
+Copy it into **Access token** and clear this field, then rotate the token:
+everything configured here is stored in plain text in the task configuration and
+in every project export. This parameter is removed in version 7.0.0.
+""",
             advanced=True,
             default_value="",
         ),
@@ -137,13 +156,15 @@ Example Variables: `{"id" : 1}`
 class GraphQLPlugin(WorkflowPlugin):
     """GraphQL Workflow Plugin to query GraphQL APIs"""
 
-    # pylint: disable=too-many-arguments
-    def __init__(  # nosec
+    # A plugin constructor takes one argument per PluginParameter, so its arity is
+    # fixed by the plugin's configuration surface, not by a style choice here.
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         graphql_url: str,
         graphql_query: str,
         graphql_variable_values: str = "",
         graphql_dataset: str = "",
+        access_token: Password | str = "",
         oauth_access_token: str = "",
     ) -> None:
         self.graphql_query: str = ""
@@ -159,10 +180,29 @@ class GraphQLPlugin(WorkflowPlugin):
         self.set_graphql_variable_values(graphql_variable_values)
         self.graphql_dataset = graphql_dataset
         self.headers = {}
-        if oauth_access_token:
-            self.headers["Authorization"] = f"Bearer {oauth_access_token}"
+        token = self._resolve_access_token(access_token, oauth_access_token)
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
 
         self._set_ports()
+
+    def _resolve_access_token(self, access_token: Password | str, oauth_access_token: str) -> str:
+        """Return the token to authenticate with, preferring the non-deprecated parameter
+
+        `oauth_access_token` is used only while `access_token` is empty, and using it is
+        logged, since that parameter is removed in version 7.0.0.
+        """
+        token = access_token.decrypt() if isinstance(access_token, Password) else access_token
+        if token:
+            return token
+        if oauth_access_token:
+            self.log.warning(
+                "The deprecated 'OAuth access token' parameter is used. Move the value to the"
+                " 'Access token' parameter, which keeps it encrypted, and clear the deprecated"
+                " one - it is removed in version 7.0.0."
+            )
+            return oauth_access_token
+        return ""
 
     def set_graphql_variable_values(self, variable_values: str) -> None:
         """Validate and set graphql_variable_values"""

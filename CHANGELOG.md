@@ -7,9 +7,23 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- New **Access token** parameter, which holds the token encrypted instead of in plain text
+  and is sent as the `Authorization: Bearer <token>` header - a GitLab personal, project or
+  group access token works with it
+
 ### Changed
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
+
+### Deprecated
+
+- The **OAuth access token** parameter, in favour of **Access token**. A token configured
+  there is still used while **Access token** is empty, and now logs a warning when it is.
+  Copy the value over, clear the old field and rotate the token, since everything stored
+  there has been kept in plain text in the task configuration and in project exports. The
+  parameter is removed in version 7.0.0
 
 
 ## [6.0.1] 2026-09-08

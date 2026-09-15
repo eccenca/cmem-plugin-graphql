@@ -17,7 +17,8 @@ from cmem_plugin_base.dataintegration.entity import (
     EntityPath,
     EntitySchema,
 )
-from cmem_plugin_base.testing import TestExecutionContext
+from cmem_plugin_base.dataintegration.parameter.password import Password
+from cmem_plugin_base.testing import TestExecutionContext, TestSystemContext
 from requests import HTTPError
 
 from cmem_plugin_graphql.workflow.graphql import GraphQLPlugin
@@ -32,6 +33,37 @@ RESOURCE_NAME = "sample_fruit.json"
 needs_cmem = pytest.mark.skipif(
     os.environ.get("CMEM_BASE_URI", "") == "", reason="Needs CMEM configuration"
 )
+
+# ``TESTING_GITLAB_URL`` names a GitLab instance; its GraphQL endpoint is always
+# ``/api/graphql`` on that instance. A configuration that spells the full endpoint out
+# is accepted as well, since both readings of the variable name are reasonable.
+GITLAB_INSTANCE = os.environ.get("TESTING_GITLAB_URL", "https://gitlab.com").rstrip("/")
+GITLAB_URL = (
+    GITLAB_INSTANCE
+    if GITLAB_INSTANCE.endswith("/api/graphql")
+    else f"{GITLAB_INSTANCE}/api/graphql"
+)
+GITLAB_TOKEN = os.environ.get("TESTING_GITLAB_TOKEN", "")
+
+needs_gitlab = pytest.mark.skipif(
+    GITLAB_TOKEN == "", reason="Needs TESTING_GITLAB_TOKEN configuration"
+)
+
+
+# Passed through variables rather than inline: ruff reads a string literal handed to an
+# argument named like a secret as a hardcoded credential (S106).
+LEGACY_VALUE = "value-from-the-deprecated-parameter"
+CURRENT_VALUE = "value-from-the-access-token-parameter"
+
+
+def password(value: str) -> Password:
+    """Build a Password as DataIntegration would hand one to the plugin.
+
+    ``TestSystemContext`` encrypts and decrypts by returning the value unchanged, and
+    constructs nothing user-bound, so this needs no Corporate Memory deployment.
+    """
+    return Password(TestSystemContext().encrypt(value), TestSystemContext())
+
 
 FRUIT_QUERY = "query{fruit(id:1){id,fruit_name}}"
 FRUIT_QUERY_WITH_VARIABLE = "query manzana($id: ID!){fruit(id: $id){id, fruit_name}}"
@@ -380,6 +412,63 @@ def test_validate_invalid_inputs() -> None:
         GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=query, graphql_dataset="None").execute(
             [], TestExecutionContext(project_id=PROJECT_NAME)
         )
+
+
+def test_access_token_is_sent_as_bearer_header() -> None:
+    """Test that the access token becomes an Authorization header"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, access_token=password(CURRENT_VALUE)
+    )
+    assert plugin.headers == {"Authorization": f"Bearer {CURRENT_VALUE}"}
+
+
+def test_no_token_sends_no_authorization_header() -> None:
+    """Test that no header is sent when neither token parameter is configured"""
+    plugin = GraphQLPlugin(graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY)
+    assert plugin.headers == {}
+
+
+def test_deprecated_token_is_used_and_warned_about(caplog: pytest.LogCaptureFixture) -> None:
+    """Test that the deprecated parameter still authenticates, and says so"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL, graphql_query=FRUIT_QUERY, oauth_access_token=LEGACY_VALUE
+    )
+    assert plugin.headers == {"Authorization": f"Bearer {LEGACY_VALUE}"}
+    assert "deprecated" in caplog.text
+
+
+def test_access_token_wins_over_deprecated_token(caplog: pytest.LogCaptureFixture) -> None:
+    """Test that the deprecated parameter is ignored, silently, once the new one is set"""
+    plugin = GraphQLPlugin(
+        graphql_url=GRAPHQL_URL,
+        graphql_query=FRUIT_QUERY,
+        access_token=password(CURRENT_VALUE),
+        oauth_access_token=LEGACY_VALUE,
+    )
+    assert plugin.headers == {"Authorization": f"Bearer {CURRENT_VALUE}"}
+    assert "deprecated" not in caplog.text
+
+
+@needs_gitlab
+def test_gitlab_query_with_access_token() -> None:
+    """Test a query against a GitLab endpoint authenticated with an access token.
+
+    ``currentUser`` is valid on every GitLab instance and answers with the user the
+    token belongs to, so a non-empty username proves the header was honoured rather
+    than only that the endpoint could be reached.
+    """
+    plugin = GraphQLPlugin(
+        graphql_url=GITLAB_URL,
+        graphql_query="query { currentUser { username } }",
+        access_token=password(GITLAB_TOKEN),
+    )
+    entities = plugin.execute([], StubExecutionContext())
+    assert [path.path for path in entities.schema.paths] == ["currentUser"]
+    current_user = entities.sub_entities[0]
+    assert [path.path for path in current_user.schema.paths] == ["username"]
+    usernames = [entity.values[0][0] for entity in current_user.entities]
+    assert len(usernames) == 1
+    assert usernames[0]
 
 
 def test_dummy() -> None:

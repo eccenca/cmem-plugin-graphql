@@ -21,10 +21,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
 - The result always leaves on the output port now, one entity per query execution
-- The plugin identifier is pinned to the value it has always generated,
-  `cmem_plugin_graphql-workflow-graphql-GraphQLPlugin`. Nothing changes for a configured
-  task; it is the module path and the class name that can move from now on without
-  orphaning the workflow tasks built on this one
+- The plugin identifier is set explicitly now, so the module path and the class name stop
+  deciding it and can move without orphaning the workflow tasks built on this one
 - The output schema is derived from **Query** wherever the query describes its own
   response, so the paths are offered to the next task while the workflow is drawn
   instead of only becoming known once the task has run. A query that does not parse
@@ -81,6 +79,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Breaking Change
 
+- The plugin identifier changed from `cmem_plugin_graphql-workflow-graphql-GraphQLPlugin`,
+  which it generated from the module path and the class name, to `cmem_plugin_graphql-Query`.
+  A task configured before this release stops resolving and its workflow fails with
+  *Invalid plugin cmem_plugin_graphql-workflow-graphql-GraphQLPlugin* until the task names
+  the new identifier. Rebuilding the task in the workspace works; so does rewriting the
+  `type` of the existing task, which keeps its id, its place in every workflow, its
+  parameter templates and its stored token
 - The **Target JSON Dataset** parameter is gone. A task configured with one has to be rebuilt:
   connect the output port to the task that should receive the result, and write it to
   a dataset with a dedicated task where that is still wanted

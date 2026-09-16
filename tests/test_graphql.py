@@ -668,10 +668,11 @@ def test_a_template_that_cannot_parse_is_left_to_its_rendering() -> None:
 def test_the_plugin_identifier_never_moves() -> None:
     """Test the identifier deployed tasks reference.
 
-    It used to be generated from the module path and the class name, so moving the
+    It was generated from the module path and the class name until 7.0.0, so moving the
     module or renaming the class silently changed the identity of every task built on
-    it. It is pinned now, which only helps while it keeps this exact value: a tidier
-    one would orphan the tasks already in the field.
+    it. It is set explicitly now, and changing this value again orphans every task in
+    the field - which is why it moved in a release that already required them to be
+    reconfigured, and must not move in one that does not.
     """
     plugin = next(iter(discover_plugins("cmem_plugin_graphql").plugins))
-    assert plugin.plugin_id == "cmem_plugin_graphql-workflow-graphql-GraphQLPlugin"
+    assert plugin.plugin_id == "cmem_plugin_graphql-Query"

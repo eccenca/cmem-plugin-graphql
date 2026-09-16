@@ -94,6 +94,20 @@ def entities_from_payload(payload: list[dict[str, Any]], schema: EntitySchema) -
     return Entities(entities=iter(root_entities), schema=schema, sub_entities=sub_entities)
 
 
+def without_dangling_relations(entities: Entities) -> Entities:
+    """Clean a whole collection tree, root and nested alike
+
+    The entities a derived schema produces are cleaned as they are built, but a query
+    that describes no schema is handed to `build_entities_from_data` whole, and its
+    result carries the same placeholder at every level.
+    """
+    return Entities(
+        entities=_without_dangling_relations(entities).entities,
+        schema=entities.schema,
+        sub_entities=[_without_dangling_relations(_) for _ in entities.sub_entities or []],
+    )
+
+
 def _without_dangling_relations(entities: Entities) -> Entities:
     """Drop the placeholder that a null object leaves behind in a relation path
 
@@ -140,9 +154,23 @@ def get_dict(entities: Entities) -> Iterator[dict[str, str]]:
         yield result
 
 
+def render_template(template_text: str, values: dict[str, str]) -> str:
+    """Render a Jinja template that produces GraphQL or JSON, not HTML
+
+    Autoescaping is off. It is what `S701` asks for, and it is wrong here: it rewrites
+    `&`, `<`, `>`, `"` and `'` in the rendered values, so a name like `O'Brien & Co`
+    reaches the endpoint as `O&#39;Brien &amp; Co` - the query asks for something the
+    user never typed, and a mutation stores it. Neither GraphQL nor JSON is HTML, and
+    HTML escaping protects neither of them.
+
+    Values are substituted as they are, so a value carrying a quote or a backslash can
+    still break the JSON it lands in. Jinja's `tojson` filter is the way to place an
+    untrusted or structured value safely.
+    """
+    environment = jinja2.Environment(autoescape=False)  # noqa: S701
+    return environment.from_string(template_text).render(values)
+
+
 def is_jinja_template(value: str) -> bool:
     """Check value contain jinja variables"""
-    environment = jinja2.Environment(autoescape=True)
-    template = environment.from_string(value)
-    res = template.render()
-    return res != value
+    return render_template(value, {}) != value

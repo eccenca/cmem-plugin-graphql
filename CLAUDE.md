@@ -34,7 +34,7 @@ task install             # build + cmemc admin workspace python install
 task uninstall           # cmemc admin workspace python uninstall
 ```
 
-Tests that require a live CMEM server are guarded with `@needs_cmem` (skips unless `CMEM_BASE_URI` is set). The lone non-CMEM test is `test_is_string_jinja_template` and `test_dummy`.
+The plugin talks to no Corporate Memory deployment, so no test needs one. The tests that really call a GraphQL endpoint - three of them mutations against a public endpoint nobody here owns - are guarded with `@needs_endpoint` and run only when `TESTING_GRAPHQL_ENDPOINT` names the endpoint. `@needs_gitlab` guards the one test authenticating with a real token, on `TESTING_GITLAB_TOKEN` and `TESTING_GITLAB_URL`. Everything else runs offline.
 
 ## Architecture
 
@@ -43,26 +43,30 @@ cmem_plugin_graphql/
   __init__.py              # package marker (empty)
   workflow/
     graphql.py             # GraphQLPlugin — the single WorkflowPlugin entry point
-    utils.py               # jinja template detection, entity/dict conversion helpers
+    utils.py               # schema derivation, entity building, jinja rendering helpers
 tests/
-  test_graphql.py          # integration tests against a public test GraphQL endpoint
+  test_graphql.py          # unit tests, plus endpoint tests behind TESTING_GRAPHQL_ENDPOINT
 ```
 
 ### Key module: `workflow/graphql.py`
 
-- **`GraphQLPlugin`** — decorated with `@Plugin(...)` to register as a CMEM workflow task. Parameters: `graphql_url`, `graphql_query`, `graphql_variable_values`, `graphql_dataset` (optional), `oauth_access_token` (optional).
+- **`GraphQLPlugin`** — decorated with `@Plugin(...)` to register as a DataIntegration workflow task. Parameters, in the order the form shows them: `graphql_url`, `access_token` (a `Password`), `output_mode` (`entities` or `file`), `graphql_query`, `graphql_variable_values`. The form order follows the constructor signature, not the decorator list, so the two optional leading parameters carry no Python default and rely on their `PluginParameter` `default_value`.
 - Query validation: detects Jinja templates via `is_jinja_template()` (renders and checks for substitution); otherwise validates as pure GraphQL syntax with `gql()`.
 - Variable values validation: detects Jinja templates or validates as JSON.
 - **`execute()`** branching logic:
   - If Jinja is detected in either query or variables → iterates over input `Entities`, renders per-entity, executes per entity via `process_entities()`.
   - Otherwise → single-shot execution against the endpoint with static variables.
-- Results are collected into a list; if `graphql_dataset` is set, payload is written to that CMEM dataset via `write_to_dataset()`.
+- Results are collected into a list and leave on the output port. In `file` mode they are written to one `graphql-result.json` in a fresh temporary directory and handed on as a `FileEntitySchema` entity; otherwise they become entities.
+- **`_set_ports()`** — derives the output schema from the query with `output_schema_from_query()` and declares a `FixedSchemaPort`, falling back to `UnknownSchemaPort` when the query describes nothing (a Jinja template, several operations, a fragment at the top level).
 
 ### Key module: `workflow/utils.py`
 
-- **`is_jinja_template(value)`** — renders through Jinja's `Environment`; if the rendered output differs from the input, Jinja variables were present.
+- **`render_template(text, values)`** — renders with autoescaping **off**: the output is GraphQL or JSON, and HTML escaping would corrupt both. `S701` is suppressed there with the reason in place.
+- **`is_jinja_template(value)`** — renders through `render_template`; if the rendered output differs from the input, Jinja syntax was present.
+- **`output_schema_from_query(query)`** — turns the top level of a parsed query into an `EntitySchema`, aliases included, or `None` when the query describes nothing.
+- **`entities_from_payload(payload, schema)`** — builds entities that conform to the declared schema rather than to the response, which is what keeps the declaration true for every answer.
+- **`without_dangling_relations(entities)`** — strips the `[""]` placeholder `build_entities_from_data` leaves in a relation path when a field is null for some items and an object for others; an empty string there makes a JSON dataset write fail.
 - **`get_dict(entities)`** — iterator that flattens `Entities` into per-entity dicts keyed by schema path.
-- **`get_entities_from_list(data)` / `create_entity(paths, dict_)`** — bidirectional helpers for converting between `list[dict]` and `Entities`.
 
 ## Dependencies
 

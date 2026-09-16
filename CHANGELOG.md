@@ -34,7 +34,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Reworked the task and parameter documentation for the reshaped task: it describes what
   leaves on the output port and how the schema follows from the query, says where the task
-  sits in a chain, and keeps the Jinja caveats. It is now structured under headings, with
+  sits in a chain, and keeps the caveat that Jinja text is only checked when it is
+  rendered. It is now structured under headings, with
   the caveats as a list, so a reader can find one section without reading the rest. The
   **Endpoint**, **Query** and **Query variables** descriptions lead with what the
   parameter controls, and the query example renders as a code block
@@ -45,17 +46,27 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   no longer breaks a JSON dataset connected to the output port. Such a field was
   described as a relation and given an empty string instead of a reference where the
   answer was null, and the write failed with *Current context not Array but Object*
+- The same null-object repair now covers a query carrying Jinja syntax, which describes
+  no schema and therefore leaves through the other branch of the task. That branch handed
+  the placeholder on untouched, so the per entity mode - the one the fault was found in -
+  still failed the write
+- Jinja values are no longer HTML escaped on their way into the query and the variables.
+  A name such as `O'Brien & Co` reached the endpoint as `O&#39;Brien &amp; Co`, so a query
+  asked about, and a mutation stored, a string nobody typed
+- A failing entity is logged with the message of the error rather than only its class, so
+  a run of many entities says which one failed and why
+- A cancelled workflow stops the task between entities instead of querying the endpoint
+  once for every remaining one
 - The task no longer talks to Corporate Memory at all
 
-### Removed
+### Breaking Change
 
-- The **Target JSON Dataset** parameter. A task configured with one has to be rebuilt:
+- The **Target JSON Dataset** parameter is gone. A task configured with one has to be rebuilt:
   connect the output port to the task that should receive the result, and write it to
   a dataset with a dedicated task where that is still wanted
-- The **OAuth access token** parameter, announced for removal in this version. Move the
-  value to **Access token**, which keeps it encrypted, and rotate the token, since
-  everything stored in the old parameter was kept in plain text in the task
-  configuration and in every project export
+- The **OAuth access token** parameter is gone. Move the value to **Access token**, which
+  keeps it encrypted, and rotate the token, since everything stored in the old parameter
+  was kept in plain text in the task configuration and in every project export
 
 
 ## [6.0.1] 2026-09-08

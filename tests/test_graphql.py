@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ReportContext
@@ -16,6 +17,7 @@ from cmem_plugin_base.dataintegration.entity import (
 from cmem_plugin_base.dataintegration.parameter.password import Password
 from cmem_plugin_base.dataintegration.ports import FixedSchemaPort, UnknownSchemaPort
 from cmem_plugin_base.dataintegration.typed_entities.file import FileEntitySchema
+from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
 from cmem_plugin_base.testing import TestSystemContext
 
 from cmem_plugin_graphql.workflow.graphql import OUTPUT, RESULT_FILE_NAME, GraphQLPlugin
@@ -23,9 +25,22 @@ from cmem_plugin_graphql.workflow.utils import (
     entities_from_payload,
     is_jinja_template,
     output_schema_from_query,
+    render_template,
+    without_dangling_relations,
 )
 
-GRAPHQL_URL = "https://cmem-plugin-graphql-test.netlify.app/graphql"
+# The tests that really call an endpoint are opt-in, the way the plugin-testing skill
+# guards anything reaching an external API. Three of them are mutations, and they write
+# to a public endpoint nobody here owns, so they must not run on every push of every
+# branch. Set TESTING_GRAPHQL_ENDPOINT to the endpoint to run them.
+GRAPHQL_URL = os.environ.get(
+    "TESTING_GRAPHQL_ENDPOINT", "https://cmem-plugin-graphql-test.netlify.app/graphql"
+)
+
+needs_endpoint = pytest.mark.skipif(
+    os.environ.get("TESTING_GRAPHQL_ENDPOINT", "") == "",
+    reason="Needs TESTING_GRAPHQL_ENDPOINT configuration",
+)
 
 # ``TESTING_GITLAB_URL`` names a GitLab instance; its GraphQL endpoint is always
 # ``/api/graphql`` on that instance. A configuration that spells the full endpoint out
@@ -166,12 +181,14 @@ def assert_is_added_apple(entities: Entities) -> None:
     assert [entity.values for entity in fruit.entities] == [APPLE]
 
 
+@needs_endpoint
 def test_execution() -> None:
     """Test a plain query against the endpoint"""
     plugin = build_plugin(graphql_query=FRUIT_QUERY)
     assert_is_manzana(plugin.execute([], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_execution_with_variables() -> None:
     """Test a query with static variables"""
     plugin = build_plugin(
@@ -181,6 +198,7 @@ def test_execution_with_variables() -> None:
     assert_is_manzana(plugin.execute([], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_execution_with_jinja_template() -> None:
     """Test that a Jinja template in the variables queries once per input entity"""
     plugin = build_plugin(
@@ -190,6 +208,7 @@ def test_execution_with_jinja_template() -> None:
     assert_is_manzana(plugin.execute([id_entities(1)], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_execution_preserves_unicode_characters() -> None:
     """Test that non-ASCII characters from the GraphQL response reach the entities intact"""
     plugin = build_plugin(
@@ -208,12 +227,14 @@ def test_execution_preserves_unicode_characters() -> None:
     assert values["family"] == ["Rutáceae"]
 
 
+@needs_endpoint
 def test_mutation() -> None:
     """Test a mutation without variables"""
     plugin = build_plugin(graphql_query=ADD_FRUIT_MUTATION)
     assert_is_added_apple(plugin.execute([], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_mutation_with_variables() -> None:
     """Test a mutation with static variables"""
     plugin = build_plugin(
@@ -223,6 +244,7 @@ def test_mutation_with_variables() -> None:
     assert_is_added_apple(plugin.execute([], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_mutation_with_jinja_template() -> None:
     """Test a mutation whose variables are rendered from an input entity"""
     plugin = build_plugin(
@@ -232,6 +254,7 @@ def test_mutation_with_jinja_template() -> None:
     assert_is_added_apple(plugin.execute([id_entities(1)], StubExecutionContext()))
 
 
+@needs_endpoint
 def test_process_entities_renders_jinja_variables() -> None:
     """Test that Jinja variables are rendered from the input entities"""
     plugin = build_plugin(
@@ -323,6 +346,7 @@ def test_output_port_is_unknown_when_the_query_does_not() -> None:
     assert isinstance(plugin.output_port, UnknownSchemaPort)
 
 
+@needs_endpoint
 def test_declared_schema_is_the_schema_of_the_entities() -> None:
     """Test that what the port promised is exactly what execute() returns.
 
@@ -337,6 +361,7 @@ def test_declared_schema_is_the_schema_of_the_entities() -> None:
     assert entities.schema == plugin.output_port.schema
 
 
+@needs_endpoint
 def test_a_relation_path_carries_sub_entity_uris() -> None:
     """Test that a path declared as a relation answers with a list of URIs to resolve"""
     plugin = build_plugin(graphql_query=FRUIT_QUERY)
@@ -453,6 +478,7 @@ def test_gitlab_query_with_access_token() -> None:
     assert usernames[0]
 
 
+@needs_endpoint
 def test_file_mode_hands_on_one_json_file() -> None:
     """Test that the file shape writes the responses and hands the file on"""
     plugin = build_plugin(graphql_query=FRUIT_QUERY, output_mode=OUTPUT.file)
@@ -467,6 +493,7 @@ def test_file_mode_hands_on_one_json_file() -> None:
     ]
 
 
+@needs_endpoint
 def test_file_mode_writes_non_ascii_as_text() -> None:
     """Test that the written file keeps non-ASCII characters instead of escaping them"""
     plugin = build_plugin(
@@ -510,3 +537,51 @@ def test_the_parameters_are_offered_in_the_intended_order() -> None:
         ("graphql_query", False, None),
         ("graphql_variable_values", False, "{}"),
     ]
+
+
+def test_a_query_without_a_derivable_schema_is_cleaned_too() -> None:
+    """Test that the null-object placeholder is removed on the fallback path as well.
+
+    A Jinja query derives no schema, so it leaves through ``build_entities_from_data``
+    rather than ``entities_from_payload``. That path used to hand the placeholder on
+    untouched, which is the one path the templated GitLab case always takes.
+    """
+    payload = [{"project": {"createdByUser": None}}, {"project": {"createdByUser": {"name": "a"}}}]
+    entities = build_entities_from_data(payload)
+    assert entities is not None
+    cleaned = without_dangling_relations(entities)
+    for collection in [cleaned, *(cleaned.sub_entities or [])]:
+        relations = [index for index, p in enumerate(collection.schema.paths) if p.is_relation]
+        for entity in collection.entities:
+            for index in relations:
+                assert "" not in entity.values[index]
+
+
+def test_rendering_does_not_html_escape_the_values() -> None:
+    """Test that a value keeps its own characters on the way into a query.
+
+    Autoescaping turns `O'Brien & Co` into `O&#39;Brien &amp; Co`, so the endpoint is
+    asked about, or told to store, a string the user never typed. GraphQL and JSON are
+    not HTML, which is why the rule asking for autoescaping is wrong here.
+    """
+    rendered = render_template('{"name": "{{ name }}"}', {"name": "O'Brien & Co"})
+    assert rendered == '{"name": "O\'Brien & Co"}'
+    assert json.loads(rendered)["name"] == "O'Brien & Co"
+
+
+def test_a_canceled_workflow_stops_sending_queries() -> None:
+    """Test that cancelling a run stops the loop instead of working through every entity"""
+
+    class CancelingContext(StubExecutionContext):
+        """A context reporting the state a user leaves behind by pressing cancel."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.workflow = SimpleNamespace(status=lambda: "Canceling")
+
+    plugin = build_plugin(
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE,
+        graphql_variable_values='{"id" : {{ id }}}',
+    )
+    sent = list(plugin.process_entities(id_entities(1), context=CancelingContext()))
+    assert sent == []

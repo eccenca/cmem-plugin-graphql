@@ -3,12 +3,12 @@
 import json
 from collections import OrderedDict
 from collections.abc import Iterator, Sequence
+from contextlib import suppress
 from pathlib import Path
 from tempfile import mkdtemp
 from types import SimpleNamespace
 from typing import Any
 
-import jinja2
 import validators
 from cmem_plugin_base.dataintegration.context import ExecutionContext, ExecutionReport
 from cmem_plugin_base.dataintegration.description import Plugin, PluginParameter
@@ -35,6 +35,8 @@ from cmem_plugin_graphql.workflow.utils import (
     get_dict,
     is_jinja_template,
     output_schema_from_query,
+    render_template,
+    without_dangling_relations,
 )
 
 # The schema of a run that sent no query at all and so has nothing to describe.
@@ -250,7 +252,7 @@ class GraphQLPlugin(WorkflowPlugin):
         payload = []
         if (inputs and self.jinja_query) or self.jinja_variable_values:
             for entities in inputs:
-                for result in self.process_entities(entities=entities):
+                for result in self.process_entities(entities=entities, context=context):
                     if not result:
                         failed_entities += 1
                     else:
@@ -296,7 +298,9 @@ class GraphQLPlugin(WorkflowPlugin):
         entities = build_entities_from_data(payload)
         if entities is None:
             return Entities(entities=iter([]), schema=EMPTY_SCHEMA)
-        return entities
+        # Nothing was declared here, but the placeholder a null object leaves behind breaks
+        # a dataset sink just the same, and a Jinja query always takes this branch.
+        return without_dangling_relations(entities)
 
     def _result_file(self, payload: list[dict[str, Any]]) -> Entities:
         """Write the collected responses to one JSON file and hand it on as a file entity
@@ -328,17 +332,18 @@ class GraphQLPlugin(WorkflowPlugin):
             introspection_args={"input_value_deprecation": False},
         )
 
-    def process_entities(self, entities: Entities) -> Iterator[dict[str, Any] | None]:
+    def process_entities(
+        self, entities: Entities, context: ExecutionContext | None = None
+    ) -> Iterator[dict[str, Any] | None]:
         """Process entities"""
         client = self._create_client()
-        environment = jinja2.Environment(autoescape=True)
         for jinja_variable_values in get_dict(entities):
+            if context and self._is_canceled(context):
+                self.log.info("Canceled, no further queries are sent.")
+                break
             result = None
-            template = environment.from_string(self.graphql_query)
-            query = template.render(jinja_variable_values)
-
-            template = environment.from_string(self.graphql_variable_values)
-            variable_values = template.render(jinja_variable_values)
+            query = render_template(self.graphql_query, jinja_variable_values)
+            variable_values = render_template(self.graphql_variable_values, jinja_variable_values)
             try:
                 request = gql(query)
                 request.variable_values = json.loads(variable_values)
@@ -350,9 +355,22 @@ class GraphQLPlugin(WorkflowPlugin):
                 TransportConnectionFailed,
                 json.decoder.JSONDecodeError,
             ) as ex:
-                self.log.error(f"Failed entity: {type(ex)}")  # noqa: TRY400
+                # The message names what was wrong with this entity; the class alone does
+                # not, and a run of thousands of entities is unreadable without it.
+                self.log.error(f"Failed entity: {type(ex).__name__}: {ex}")  # noqa: TRY400
 
             yield result
+
+    @staticmethod
+    def _is_canceled(context: ExecutionContext) -> bool:
+        """Report whether the user has asked the workflow to stop
+
+        `context.workflow` is absent in some contexts, the test ones among them, so the
+        access is guarded rather than assumed.
+        """
+        with suppress(AttributeError):
+            return bool(context.workflow.status() == "Canceling")
+        return False
 
     def _set_ports(self) -> None:
         """Define input/output ports based on the configuration"""

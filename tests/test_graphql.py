@@ -23,6 +23,7 @@ from cmem_plugin_base.testing import TestSystemContext
 from cmem_plugin_graphql.workflow.graphql import OUTPUT, RESULT_FILE_NAME, GraphQLPlugin
 from cmem_plugin_graphql.workflow.utils import (
     entities_from_payload,
+    input_schema_from_templates,
     is_jinja_template,
     output_schema_from_query,
     render_template,
@@ -676,3 +677,32 @@ def test_the_plugin_identifier_never_moves() -> None:
     """
     plugin = next(iter(discover_plugins("cmem_plugin_graphql").plugins))
     assert plugin.plugin_id == "cmem_plugin_graphql-Query"
+
+
+def test_the_input_schema_names_the_jinja_variables() -> None:
+    """Test that the paths the templates ask for are the paths the task requests"""
+    schema = input_schema_from_templates(
+        "query manzana($id: ID!){fruit(id: $id){ {{ field }} }}", '{"id": {{ id }}}'
+    )
+    assert schema is not None
+    assert [(p.path, p.is_single_value) for p in schema.paths] == [("field", True), ("id", True)]
+
+
+def test_a_task_without_jinja_declares_no_input() -> None:
+    """Test that a task ignoring its input offers no handle to connect one to"""
+    plugin = build_plugin(graphql_query=FRUIT_QUERY)
+    assert plugin.input_ports.ports == []
+
+
+def test_a_task_with_jinja_requests_the_paths_it_renders() -> None:
+    """Test that the declared input port names the paths, rather than leaving them unknown.
+
+    A port that names no paths is handed nothing: DataIntegration reads only what the
+    consuming task asks for.
+    """
+    plugin = build_plugin(
+        graphql_query=FRUIT_QUERY_WITH_VARIABLE, graphql_variable_values='{"id" : {{ id }}}'
+    )
+    ports = plugin.input_ports.ports
+    assert len(ports) == 1
+    assert [p.path for p in ports[0].schema.paths] == ["id"]

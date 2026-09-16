@@ -20,6 +20,7 @@ from cmem_plugin_base.dataintegration.parameter.multiline import (
 from cmem_plugin_base.dataintegration.parameter.password import Password, PasswordParameterType
 from cmem_plugin_base.dataintegration.plugins import WorkflowPlugin
 from cmem_plugin_base.dataintegration.ports import (
+    FixedNumberOfInputs,
     FixedSchemaPort,
     UnknownSchemaPort,
 )
@@ -34,6 +35,7 @@ from graphql.language import OperationDefinitionNode
 from cmem_plugin_graphql.workflow.utils import (
     entities_from_payload,
     get_dict,
+    input_schema_from_templates,
     is_jinja_template,
     output_schema_from_query,
     render_template,
@@ -265,7 +267,8 @@ class GraphQLPlugin(WorkflowPlugin):
         processed_entities: int = 0
         failed_entities: int = 0
         payload = []
-        if (inputs and self.jinja_query) or self.jinja_variable_values:
+        per_entity = bool((inputs and self.jinja_query) or self.jinja_variable_values)
+        if per_entity:
             for entities in inputs:
                 for result in self.process_entities(entities=entities, context=context):
                     if result is None:
@@ -290,9 +293,16 @@ class GraphQLPlugin(WorkflowPlugin):
             processed_entities += 1
             payload.append(result)
 
-        summary: list[tuple[str, str]] = []
+        summary: list[tuple[str, str]] = [("Failed entities", str(failed_entities))]
         warnings: list[str] = []
-        summary.append(("Failed entities", str(failed_entities)))
+        if per_entity and not processed_entities and not failed_entities:
+            # The run looked successful while doing nothing at all, which is how an input
+            # that never arrives presents itself.
+            warnings.append(
+                f"Jinja syntax is configured, so the endpoint is queried once per arriving"
+                f" entity - but nothing arrived on the input, and no query was sent."
+                f" Received {len(inputs)} input collection(s)."
+            )
         context.report.update(
             ExecutionReport(
                 entity_count=processed_entities,
@@ -406,7 +416,27 @@ class GraphQLPlugin(WorkflowPlugin):
         return False
 
     def _set_ports(self) -> None:
-        """Define input/output ports based on the configuration"""
+        """Define input/output ports based on the configuration
+
+        The task declared no input port at all until now, so a dataset wired into it
+        was never read: the per entity loop ran over nothing and the task reported a
+        successful run of zero queries.
+
+        A port is declared exactly when the task reads one - when the query or the
+        variables carry Jinja syntax. Without it the task sends its text once and
+        ignores anything connected, so a handle there would only invite a connection
+        that does nothing.
+
+        The port names the paths the templates ask for, rather than leaving the schema
+        unknown. DataIntegration reads only the paths the consuming task requests, so a
+        port naming none is handed nothing - which is the same empty run, declared.
+        """
+        input_schema = input_schema_from_templates(self.graphql_query, self.graphql_variable_values)
+        self.input_ports = (
+            FixedNumberOfInputs([FixedSchemaPort(schema=input_schema)])
+            if input_schema
+            else FixedNumberOfInputs([])
+        )
         self.output_schema = output_schema_from_query(self.graphql_query)
         if self.output_mode == OUTPUT.file:
             self.output_port = FixedSchemaPort(schema=FileEntitySchema())

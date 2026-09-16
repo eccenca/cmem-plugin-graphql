@@ -23,6 +23,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - The result always leaves on the output port now, one entity per query execution
 - The task no longer talks to Corporate Memory at all, and no longer needs a deployment
   to be reachable in order to run
+- The task declares its input now: one port when the query or the variables carry Jinja
+  syntax, naming the paths those templates ask for, and no port at all otherwise, since
+  a task without Jinja ignores whatever is connected. A port that names no paths is
+  handed nothing, because DataIntegration reads only the paths a task requests
 - The output schema is derived from **Query** wherever the query describes its own
   response, so the paths are offered to the next task while the workflow is drawn
   instead of only becoming known once the task has run. A query that does not parse
@@ -74,6 +78,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - An empty response object counts as a result rather than as a failed entity
 - The execution report calls an anonymous `{ ... }` query a read, where it used to call
   anything not starting with the word `query` a write
+- A run configured for Jinja that receives no entities warns about it in the report,
+  instead of reporting a successful run that queried nothing
 
 ### Breaking Change
 

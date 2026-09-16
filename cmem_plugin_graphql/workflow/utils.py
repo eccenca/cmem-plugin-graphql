@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 import jinja2
+import jinja2.meta
 from cmem_plugin_base.dataintegration.entity import Entities, Entity, EntityPath, EntitySchema
 from cmem_plugin_base.dataintegration.utils.entity_builder import build_entities_from_data
 from gql import gql
@@ -206,6 +207,28 @@ def get_dict(entities: Entities) -> Iterator[dict[str, str]]:
         for i, path in enumerate(paths):
             result[path.path] = entity.values[i][0] if entity.values[i] else ""
         yield result
+
+
+def input_schema_from_templates(*template_texts: str) -> EntitySchema | None:
+    """Derive the schema the task needs from its input, or None when it needs nothing
+
+    A Jinja template names the values it wants, so the paths the task has to be handed
+    are known before the workflow runs. They have to be declared, too: DataIntegration
+    asks the consuming task which paths it wants and reads only those, so a port that
+    names none is handed nothing - a dataset wired into a task declaring an unknown
+    input schema delivers zero entities, and the task reports a successful run over
+    nothing at all.
+    """
+    environment = jinja2.Environment(autoescape=False)  # noqa: S701
+    names: set[str] = set()
+    for text in template_texts:
+        names |= jinja2.meta.find_undeclared_variables(environment.parse(text))
+    if not names:
+        return None
+    return EntitySchema(
+        type_uri="",
+        paths=[EntityPath(path=name, is_single_value=True) for name in sorted(names)],
+    )
 
 
 def render_template(template_text: str, values: dict[str, str]) -> str:

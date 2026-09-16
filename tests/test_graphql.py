@@ -585,3 +585,81 @@ def test_a_canceled_workflow_stops_sending_queries() -> None:
     )
     sent = list(plugin.process_entities(id_entities(1), context=CancelingContext()))
     assert sent == []
+
+
+def test_a_field_selected_twice_is_one_path() -> None:
+    """Test that two selections of the same field describe one key, as the response does"""
+    schema = output_schema_from_query("query { fruit { id } fruit { fruit_name } }")
+    assert schema is not None
+    assert [(p.path, p.is_relation) for p in schema.paths] == [("fruit", True)]
+    entities = entities_from_payload([{"fruit": {"id": "1", "fruit_name": "Manzana"}}], schema)
+    assert len(list(entities.entities)) == 1
+    assert len(entities.sub_entities or []) == 1
+
+
+def test_one_relation_path_is_described_once_across_responses() -> None:
+    """Test that a path answered differently per response still has one description.
+
+    Built per response, a path holding an object in one and null in another produced
+    two collections that contradicted each other about the same path.
+    """
+    schema = output_schema_from_query("query { project { createdByUser { name } } }")
+    assert schema is not None
+    entities = entities_from_payload(
+        [{"project": {"createdByUser": None}}, {"project": {"createdByUser": {"name": "a"}}}],
+        schema,
+    )
+    described = [
+        [(p.path, p.is_relation) for p in collection.schema.paths]
+        for collection in entities.sub_entities or []
+    ]
+    assert described.count([("createdByUser", True)]) == 1
+
+
+def test_root_entities_do_not_reuse_identifiers() -> None:
+    """Test that two runs hand out different identifiers, as two tasks in one workflow do"""
+    schema = output_schema_from_query(FRUIT_QUERY)
+    assert schema is not None
+    payload = [{"fruit": {"id": "1"}}]
+    first = [_.uri for _ in entities_from_payload(payload, schema).entities]
+    second = [_.uri for _ in entities_from_payload(payload, schema).entities]
+    assert first != second
+
+
+def test_values_that_are_not_text_are_written_as_json() -> None:
+    """Test that a value keeps its JSON form rather than arriving as Python's own"""
+    schema = output_schema_from_query("query { version flags meta }")
+    assert schema is not None
+    entities = entities_from_payload(
+        [{"version": 2, "flags": [True, None], "meta": {"major": 1}}], schema
+    )
+    root = next(iter(entities.entities))
+    assert root.values == [["2"], ["true", "null"], ['{"major": 1}']]
+
+
+def test_a_field_answered_with_different_kinds_of_value_says_so() -> None:
+    """Test that mixed value kinds fail with a message naming the field, not AttributeError"""
+    schema = output_schema_from_query("query { fruits { id meta { k } } }")
+    assert schema is not None
+    with pytest.raises(ValueError, match=r"different kinds of value"):
+        entities_from_payload(
+            [{"fruits": [{"id": "1", "meta": "x"}, {"id": "2", "meta": {"k": 1}}]}], schema
+        )
+
+
+def test_a_shorthand_query_is_reported_as_a_read() -> None:
+    """Test that the report calls an anonymous query a read rather than a write"""
+    plugin = build_plugin(graphql_query="{ fruit(id:1) { id } }")
+    assert plugin._operation() == "read"  # noqa: SLF001
+
+
+def test_a_mutation_is_reported_as_a_write() -> None:
+    """Test that a mutation is still reported as a write"""
+    plugin = build_plugin(graphql_query=ADD_FRUIT_MUTATION)
+    assert plugin._operation() == "write"  # noqa: SLF001
+
+
+def test_a_template_that_cannot_parse_is_left_to_its_rendering() -> None:
+    """Test that a placeholder where GraphQL expects a value is still accepted"""
+    plugin = build_plugin(graphql_query="query manzana{fruit(id: {{ id }}){id}}")
+    assert plugin.jinja_query

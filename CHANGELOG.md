@@ -57,6 +57,22 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   a run of many entities says which one failed and why
 - A cancelled workflow stops the task between entities instead of querying the endpoint
   once for every remaining one
+- A field the endpoint answers with text in one record and with an object in another no
+  longer takes the task down with a bare `AttributeError` from inside a library. It still
+  fails, because such a response cannot become entities, but the message names the field
+  and says what to do instead
+- A field selected twice at the top level of a query, which GraphQL merges into one key,
+  is described once rather than twice and its objects are built once
+- The objects behind one path are built across the whole run rather than per response, so
+  a path answered with an object in one response and with null in another is described
+  once instead of twice, contradictorily
+- A value that is not text keeps its JSON form: `true`, `null` and `{"major": 1}` rather
+  than Python's `True`, `None` and `{'major': 1}`
+- Root entities carry an identifier of their own per run, so two runs, or two of these
+  tasks in one workflow, no longer hand out the same ones
+- An empty response object counts as a result rather than as a failed entity
+- The execution report calls an anonymous `{ ... }` query a read, where it used to call
+  anything not starting with the word `query` a write
 - The task no longer talks to Corporate Memory at all
 
 ### Breaking Change

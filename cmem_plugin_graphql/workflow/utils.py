@@ -1,7 +1,9 @@
 """Utils module"""
 
+import json
 from collections.abc import Iterator
 from typing import Any
+from uuid import uuid4
 
 import jinja2
 from cmem_plugin_base.dataintegration.entity import Entities, Entity, EntityPath, EntitySchema
@@ -40,19 +42,23 @@ def output_schema_from_query(query: str) -> EntitySchema | None:
     operations = [d for d in document.definitions if isinstance(d, OperationDefinitionNode)]
     if len(operations) != 1:
         return None
-    paths = []
+    # A field selected twice at the top level - which happens as soon as two fragments
+    # spread at the root ask for the same thing - is one key in the response, because
+    # GraphQL merges the selections. Describing it twice would offer the next task a
+    # duplicated path and build the same object twice.
+    relations: dict[str, bool] = {}
     for selection in operations[0].selection_set.selections:
         if not isinstance(selection, FieldNode):
             return None
         name = selection.alias.value if selection.alias else selection.name.value
-        paths.append(
-            EntityPath(
-                path=name,
-                is_relation=selection.selection_set is not None,
-                is_single_value=False,
-            )
-        )
-    return EntitySchema(type_uri="", paths=paths)
+        relations[name] = relations.get(name, False) or selection.selection_set is not None
+    return EntitySchema(
+        type_uri="",
+        paths=[
+            EntityPath(path=name, is_relation=is_relation, is_single_value=False)
+            for name, is_relation in relations.items()
+        ],
+    )
 
 
 def entities_from_payload(payload: list[dict[str, Any]], schema: EntitySchema) -> Entities:
@@ -68,30 +74,71 @@ def entities_from_payload(payload: list[dict[str, Any]], schema: EntitySchema) -
 
     A relation path therefore always carries a list of sub entity URIs, empty where
     the endpoint answered null, and a plain path always carries a list of values.
+
+    The objects behind one relation path are built together, across every response of
+    the run rather than one response at a time, so that path is described once. Built
+    per response, a path answered with an object in one and with null in another comes
+    out as two collections contradicting each other about the same path.
     """
-    root_entities: list[Entity] = []
+    relation_paths = [path.path for path in schema.paths if path.is_relation]
+    # what each response contributed to each path, as a slice of that path's objects
+    objects: dict[str, list[dict[str, Any]]] = {name: [] for name in relation_paths}
+    slices: list[dict[str, tuple[int, int]]] = []
+    for result in payload:
+        span: dict[str, tuple[int, int]] = {}
+        for name in relation_paths:
+            items = [_ for _ in _as_item_list(result.get(name)) if isinstance(_, dict)]
+            start = len(objects[name])
+            objects[name].extend(items)
+            span[name] = (start, start + len(items))
+        slices.append(span)
+
     sub_entities: list[Entities] = []
-    for index, result in enumerate(payload):
+    built_entities: dict[str, list[Entity]] = {name: [] for name in relation_paths}
+    for name in relation_paths:
+        built = _build_sub_entities(objects[name], name) if objects[name] else None
+        if built is None:
+            continue
+        built_entities[name] = list(built.entities)
+        collections = [
+            Entities(entities=iter(built_entities[name]), schema=built.schema),
+            *(built.sub_entities or []),
+        ]
+        sub_entities.extend(_without_dangling_relations(_) for _ in collections)
+
+    root_entities: list[Entity] = []
+    for result, span in zip(payload, slices, strict=True):
         values: list[list[str]] = []
         for path in schema.paths:
-            value = result.get(path.path)
             if not path.is_relation:
-                values.append(_as_value_list(value))
+                values.append(_as_value_list(result.get(path.path)))
                 continue
-            items = [item for item in _as_item_list(value) if isinstance(item, dict)]
-            built = build_entities_from_data(items) if items else None
-            if built is None:
-                values.append([])
-                continue
-            entities = list(built.entities)
-            values.append([entity.uri for entity in entities])
-            built_collections = [
-                Entities(entities=iter(entities), schema=built.schema),
-                *(built.sub_entities or []),
-            ]
-            sub_entities.extend(_without_dangling_relations(_) for _ in built_collections)
-        root_entities.append(Entity(uri=f"urn:x-graphql:result:{index}", values=values))
+            start, end = span[path.path]
+            values.append([_.uri for _ in built_entities[path.path][start:end]])
+        # A run must not hand out identifiers another run, or another task in the same
+        # workflow, also hands out: they would be taken for the same thing.
+        root_entities.append(Entity(uri=f"urn:uuid:{uuid4()}", values=values))
     return Entities(entities=iter(root_entities), schema=schema, sub_entities=sub_entities)
+
+
+def _build_sub_entities(objects: list[dict[str, Any]], path: str) -> Entities | None:
+    """Build the entities behind one relation path, or say which path could not be built
+
+    `build_entities_from_data` assumes a key holds the same kind of thing in every
+    item, and walks into a value it decided is an object. A response where one record
+    answers a field with text and another with an object - ordinary where a union type
+    or a custom JSON scalar is involved - therefore fails inside the library with a
+    bare `AttributeError`, after every query of the run has already been sent, and a
+    mutation among them has already been carried out.
+    """
+    try:
+        return build_entities_from_data(objects)
+    except (AttributeError, TypeError) as error:
+        raise ValueError(
+            f"The response could not be turned into entities below '{path}': the endpoint "
+            f"answered the same field with different kinds of value. Select the fields "
+            f"individually, or take the result as a file instead. ({error})"
+        ) from error
 
 
 def without_dangling_relations(entities: Entities) -> Entities:
@@ -140,8 +187,15 @@ def _as_item_list(value: object) -> list[object]:
 
 
 def _as_value_list(value: object) -> list[str]:
-    """Read a plain value as the list of strings behind it."""
-    return [f"{item}" for item in _as_item_list(value)]
+    """Read a plain value as the list of strings behind it
+
+    Anything that is not already text is written as JSON rather than through Python's
+    own formatting, which would hand on `True`, `None` and `{'k': 1}` where the
+    endpoint answered `true`, `null` and an object. A field selected without sub
+    fields can still answer with an object where the endpoint types it as a custom
+    JSON scalar, and that object is then the JSON text of itself.
+    """
+    return [item if isinstance(item, str) else json.dumps(item) for item in _as_item_list(value)]
 
 
 def get_dict(entities: Entities) -> Iterator[dict[str, str]]:

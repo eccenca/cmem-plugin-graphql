@@ -29,6 +29,7 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportConnectionFailed, TransportQueryError
 from graphql import GraphQLError, GraphQLSyntaxError
+from graphql.language import OperationDefinitionNode
 
 from cmem_plugin_graphql.workflow.utils import (
     entities_from_payload,
@@ -232,7 +233,13 @@ class GraphQLPlugin(WorkflowPlugin):
             raise ValueError("Variables String is not valid.") from ex
 
     def set_graphql_query(self, query: str) -> None:
-        """Validate and set graphql_query"""
+        """Validate and set graphql_query
+
+        A template is not checked. It could be rendered with its placeholders standing
+        in as `null` and the result parsed, but a template that supplies a field name
+        or a whole selection renders to `null` in a position GraphQL needs a name in,
+        so that check would reject configurations that are perfectly good.
+        """
         query = query.strip()
         try:
             if is_jinja_template(query):
@@ -253,7 +260,7 @@ class GraphQLPlugin(WorkflowPlugin):
         if (inputs and self.jinja_query) or self.jinja_variable_values:
             for entities in inputs:
                 for result in self.process_entities(entities=entities, context=context):
-                    if not result:
+                    if result is None:
                         failed_entities += 1
                     else:
                         payload.append(result)
@@ -281,7 +288,7 @@ class GraphQLPlugin(WorkflowPlugin):
         context.report.update(
             ExecutionReport(
                 entity_count=processed_entities,
-                operation="read" if self.graphql_query.startswith("query") else "write",
+                operation=self._operation(),
                 operation_desc="entities processed",
                 summary=summary,
                 warnings=warnings,
@@ -302,6 +309,24 @@ class GraphQLPlugin(WorkflowPlugin):
         # a dataset sink just the same, and a Jinja query always takes this branch.
         return without_dangling_relations(entities)
 
+    def _operation(self) -> str:
+        """Report whether this run reads or writes, as the execution report shows it
+
+        The operation is in the parsed query, not in how the text happens to start:
+        the anonymous shorthand `{ fruit { id } }` is a query, and reading the first
+        word calls it a write. A template that does not parse keeps the guess, since
+        there is nothing else to go on before it is rendered.
+        """
+        with suppress(GraphQLError):
+            operations = [
+                _
+                for _ in gql(self.graphql_query).document.definitions
+                if isinstance(_, OperationDefinitionNode)
+            ]
+            if len(operations) == 1:
+                return "read" if operations[0].operation.value == "query" else "write"
+        return "read" if self.graphql_query.startswith("query") else "write"
+
     def _result_file(self, payload: list[dict[str, Any]]) -> Entities:
         """Write the collected responses to one JSON file and hand it on as a file entity
 
@@ -309,7 +334,7 @@ class GraphQLPlugin(WorkflowPlugin):
         what it holds, and `ensure_ascii` stays off so a response with non-ASCII text
         reaches the file as that text rather than as escape sequences.
         """
-        path = Path(mkdtemp()) / RESULT_FILE_NAME
+        path = Path(mkdtemp(prefix="cmem-plugin-graphql-")) / RESULT_FILE_NAME
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log.info(f"Wrote the responses to {path}.")
         schema = FileEntitySchema()

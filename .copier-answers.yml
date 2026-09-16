@@ -4,8 +4,8 @@ _src_path: gh:eccenca/cmem-plugin-template
 author_mail: cmempy-developer@eccenca.com
 author_name: eccenca GmbH
 github_page: https://github.com/eccenca/cmem-plugin-graphql
-project_description: Send queries to a GraphQL endpoint and save the results in a
-    JSON dataset.
+project_description: Send queries to a GraphQL endpoint and process the results in a
+    workflow.
 project_slug: graphql
 project_type: plugin
 pypi: true

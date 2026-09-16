@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
 - The result always leaves on the output port now, one entity per query execution
+- The plugin identifier is pinned to the value it has always generated,
+  `cmem_plugin_graphql-workflow-graphql-GraphQLPlugin`. Nothing changes for a configured
+  task; it is the module path and the class name that can move from now on without
+  orphaning the workflow tasks built on this one
 - The output schema is derived from **Query** wherever the query describes its own
   response, so the paths are offered to the next task while the workflow is drawn
   instead of only becoming known once the task has run. A query that does not parse

@@ -60,6 +60,13 @@ RESULT_FILE_NAME = "graphql-result.json"
 
 @Plugin(
     label="GraphQL query",
+    # The identifier every deployed task already references, written out verbatim rather
+    # than shortened to the `<package>-<Name>` form a new plugin would take. Until now it
+    # was generated from the module path and the class name, so moving this module or
+    # renaming the class would have changed the identity of tasks in the field and
+    # orphaned the workflows built on them. Pinning it is what stops that; tidying it
+    # would cause exactly the breakage it prevents.
+    plugin_id="cmem_plugin_graphql-workflow-graphql-GraphQLPlugin",
     description="Sends a GraphQL query or mutation to an endpoint and returns the result"
     " as entities.",
     documentation="""This task sends a GraphQL query or mutation to an endpoint and

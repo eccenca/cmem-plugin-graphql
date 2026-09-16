@@ -663,3 +663,15 @@ def test_a_template_that_cannot_parse_is_left_to_its_rendering() -> None:
     """Test that a placeholder where GraphQL expects a value is still accepted"""
     plugin = build_plugin(graphql_query="query manzana{fruit(id: {{ id }}){id}}")
     assert plugin.jinja_query
+
+
+def test_the_plugin_identifier_never_moves() -> None:
+    """Test the identifier deployed tasks reference.
+
+    It used to be generated from the module path and the class name, so moving the
+    module or renaming the class silently changed the identity of every task built on
+    it. It is pinned now, which only helps while it keeps this exact value: a tidier
+    one would orphan the tasks already in the field.
+    """
+    plugin = next(iter(discover_plugins("cmem_plugin_graphql").plugins))
+    assert plugin.plugin_id == "cmem_plugin_graphql-workflow-graphql-GraphQLPlugin"

@@ -21,8 +21,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Updated to cmem-plugin-template v9.7.0 and refreshed all dependencies
 - The result always leaves on the output port now, one entity per query execution
-- The plugin identifier is set explicitly now, so the module path and the class name stop
-  deciding it and can move without orphaning the workflow tasks built on this one
+- The task no longer talks to Corporate Memory at all, and no longer needs a deployment
+  to be reachable in order to run
 - The output schema is derived from **Query** wherever the query describes its own
   response, so the paths are offered to the next task while the workflow is drawn
   instead of only becoming known once the task has run. A query that does not parse
@@ -33,14 +33,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   so a field answering with a single object arrives as a one element list. A JSON
   dataset connected to the output port therefore holds an array wherever the
   endpoint answered with one object
-
 - Reworked the task and parameter documentation for the reshaped task: it describes what
   leaves on the output port and how the schema follows from the query, says where the task
   sits in a chain, and keeps the caveat that Jinja text is only checked when it is
-  rendered. It is now structured under headings, with
-  the caveats as a list, so a reader can find one section without reading the rest. The
-  **Endpoint**, **Query** and **Query variables** descriptions lead with what the
-  parameter controls, and the query example renders as a code block
+  rendered. It is now structured under headings, with the caveats as a list, so a reader
+  can find one section without reading the rest. The **Endpoint**, **Query** and **Query
+  variables** descriptions lead with what the parameter controls, and the query example
+  renders as a code block
 
 ### Fixed
 
@@ -75,7 +74,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - An empty response object counts as a result rather than as a failed entity
 - The execution report calls an anonymous `{ ... }` query a read, where it used to call
   anything not starting with the word `query` a write
-- The task no longer talks to Corporate Memory at all
 
 ### Breaking Change
 
@@ -91,7 +89,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
   a dataset with a dedicated task where that is still wanted
 - The **OAuth access token** parameter is gone. Move the value to **Access token**, which
   keeps it encrypted, and rotate the token, since everything stored in the old parameter
-  was kept in plain text in the task configuration and in every project export
+  was kept as readable text in the task configuration, and travels as such wherever that
+  configuration goes
 
 
 ## [6.0.1] 2026-09-08

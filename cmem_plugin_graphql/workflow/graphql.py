@@ -400,7 +400,7 @@ class GraphQLPlugin(WorkflowPlugin):
             ) as ex:
                 # The message names what was wrong with this entity; the class alone does
                 # not, and a run of thousands of entities is unreadable without it.
-                self.log.error(f"Failed entity: {type(ex).__name__}: {ex}")  # noqa: TRY400
+                self.log.error(f"Failed entity: {type(ex).__name__}: {ex}")
 
             yield result
 

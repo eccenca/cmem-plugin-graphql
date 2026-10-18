@@ -3018,14 +3018,14 @@ six = ">=1.13.0"
 
 [[package]]
 name = "trivy-py-ecc"
-version = "0.73.0.1"
+version = "0.76.0.1"
 description = "Python wrapper around invoking trivy (https://trivy.dev/)"
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "trivy_py_ecc-0.73.0.1-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:93e4bbd0ff677fbbfa5b58123714e2a96279da5a281826685b17927a7f75e7d5"},
-    {file = "trivy_py_ecc-0.73.0.1.tar.gz", hash = "sha256:550ed85b5f7ca0230cfe0a73ad79f7acf894df8a436968c22beeff2a6ae604af"},
+    {file = "trivy_py_ecc-0.76.0.1-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:9b426f382743a37d74c693ba0dbccc01b8941cb55a69922fff2d0f1d436ad931"},
+    {file = "trivy_py_ecc-0.76.0.1.tar.gz", hash = "sha256:9385d46a4a3865106aee8a64964c64b5f95cf0dff1e4e30d993fc1c50cf34a89"},
 ]
 
 [[package]]
@@ -3351,4 +3351,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "bb7eacb547d88a9f7159eb6a302c3e7716fb1fad4320f9f2791a082fca38ca99"
+content-hash = "eb8290c7397be864ab1862d0d72364c5b5f0acf148a07764dd1a2dc3d891b0eb"
